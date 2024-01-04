@@ -1,0 +1,7 @@
+<launch>
+
+ <!-- <include file="$(find fetch_disinfectant_project_moveit_config)/launch/marker.launch" />
+ <include file="$(find octomap_server)/launch/octomap_mapping.launch" /> -->
+ <node type="rviz" name="rviz" pkg="rviz" args="-d $(find cross_pkg)/rviz/default.rviz" />
+
+</launch>
