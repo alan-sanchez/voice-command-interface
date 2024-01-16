@@ -12,7 +12,7 @@ class LLAMAGeneration:
         '''
         A constructor that initializes the toeknizer and model.
         
-        Paramerters
+        Parameters:
         - self: The self reference.
         '''
         ## The hugging face model identifier
@@ -53,7 +53,7 @@ if __name__ == "__main__":
             break
 
         ## Generate response
-        generated_response = llama_generator.generate_response(user_input, max_new_tokens=100)
+        generated_response = llama_generator.generate_response(user_input, max_new_tokens=500)
 
         # Print the generated response
         print("Generated Response:", generated_response[3:])
