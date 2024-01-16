@@ -31,7 +31,7 @@ class SpeechToText:
         return transcribe: Transcribe audio in a String message type. 
         '''
         model = whisper.load_model("base") #tiny, base, small, medium, large
-        result = model.transcribe(filepath, language='en', fp16=False) 
+        result = model.transcribe(filepath, language='en', fp16=True) 
         transcribe = result["text"]
 
         return "Transcript: " + transcribe 
