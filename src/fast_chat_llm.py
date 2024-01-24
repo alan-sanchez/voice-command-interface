@@ -28,6 +28,14 @@ class FastChatGeneration:
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_id, legacy=False)
         self.model = AutoModelForSeq2SeqLM.from_pretrained(self.model_id, torch_dtype=torch.float16, device_map="auto")
 
+        # Open the file in read mode
+        with open('/home/alan/catkin_ws/src/voice_command_interface/src/init_info.txt', 'r') as file:
+            # Read the contents of the file into a string
+            self.file_contents = file.read()
+
+        # # Now, file_contents contains the contents of the file as a string
+        # print(file_contents)
+
     def generate_response(self, prompt, max_length=1000):
         '''
         A function that generates a text response.
@@ -41,8 +49,12 @@ class FastChatGeneration:
         - response (str): The generated response.
         '''
         init_info = str("Here is a list of actions that a robot can perform: clean table, clean mug, clean phone, clean bowl, clean keyboard, clean cup, clean spoon, clean knife, clean plate." +
+                        # "If a command isn't part of the list, let the user know that you don't have that command in your list."
+                        # "return the order of actions based on this voice command if it's on the provided list; if not, let the user know you can't perform the specific task: " + prompt)
                         "return the order of actions based on this voice command: " + prompt)
-        input_ids = self.tokenizer(init_info, return_tensors="pt").input_ids.to("cuda")
+
+        # print(self.file_contents + prompt)            
+        input_ids = self.tokenizer(self.file_contents + prompt, return_tensors="pt").input_ids.to("cuda")
         generation_output = self.model.generate(input_ids=input_ids, max_length=max_length)
         response = self.tokenizer.decode(generation_output[0])
         return response.lstrip('<pad>').rstrip('</s>').strip()
