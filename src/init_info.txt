@@ -1,0 +1,12 @@
+Here is a list of actions that a robot can perform: 
+    - clean table
+    - clean mug
+    - clean phone
+    - clean bowl
+    - clean keyboard
+    - clean cup
+    - clean spoon
+    - clean knife
+    - clean plate
+
+return the actions from the list based on this voice command: 
