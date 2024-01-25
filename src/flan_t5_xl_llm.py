@@ -21,7 +21,7 @@ class OpenLLAMAChatGeneration:
         - self: The self reference.
         - model_id (str): The Hugging Face model identifier.
         '''
-        # The Hugging Face model identifier/checkpoint
+        ## The Hugging Face model identifier/checkpoint: https://huggingface.co/google/flan-t5-xl
         self.model_id = "google/flan-t5-xl"
 
         # Instantiate tokenizer and model
@@ -32,10 +32,10 @@ class OpenLLAMAChatGeneration:
         self.tokenizer = T5Tokenizer.from_pretrained("google/flan-t5-xl")
         self.model = T5ForConditionalGeneration.from_pretrained(self.model_id, device_map="auto")
         
-        # ## Open the file in read mode
-        # with open('init_info.txt', 'r') as file:
-        #     ## Read the contents of the file into a string
-        #     file_contents = file.read()
+        ## Open the file in read mode
+        with open('/home/alan/catkin_ws/src/voice_command_interface/src/init_info.txt', 'r') as file:
+            ## Read the contents of the file into a string
+            self.file_contents = file.read()
 
         # # Now, file_contents contains the contents of the file as a string
         # print(file_contents)
@@ -53,15 +53,19 @@ class OpenLLAMAChatGeneration:
         Returns:
         - response (str): The generated response.
         '''
-        init_info = str("Here is a list of actions that a robot can perform: clean table, clean mug, clean phone, clean bowl, clean keyboard, clean cup, clean spoon, clean knife, clean plate." +
-                        # "If a command isn't part of the list, let the user know that you don't have that command in your list."
-                        "return the order of actions based on this voice command if it's on the provided list; if not, let the user know you can't perform the specific task: " + prompt)
-                        # "return the order of actions based on this voice command: " + prompt)
+        # init_info = str("Here is a list of actions that a robot can perform: clean table, clean mug, clean phone, clean bowl, clean keyboard, clean cup, clean spoon, clean knife, clean plate." +
+        #                 # "If a command isn't part of the list, let the user know that you don't have that command in your list."
+        #                 "return the order of actions based on this voice command if it's on the provided list; if not, let the user know you can't perform the specific task: " + prompt)
+        #                 # "return the order of actions based on this voice command: " + prompt)
         
-        ## 
-        input_ids = self.tokenizer(init_info, return_tensors="pt").input_ids.to("cuda")
+        ##
+        request = self.file_contents + prompt
+        
+        ##
+        input_ids = self.tokenizer(request,truncation=True, return_tensors="pt").input_ids.to("cuda")
         generation_output = self.model.generate(input_ids=input_ids, max_length=max_length)
         response = self.tokenizer.decode(generation_output[0])
+        
         return response.lstrip('<pad>').rstrip('</s>').strip()
 
 if __name__ == "__main__":
