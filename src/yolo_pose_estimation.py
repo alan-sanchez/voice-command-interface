@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+## Import needed libraries
 import cv2
 import numpy as np
 import roslib.packages
