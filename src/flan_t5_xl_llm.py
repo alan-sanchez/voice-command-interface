@@ -24,11 +24,7 @@ class OpenLLAMAChatGeneration:
         ## The Hugging Face model identifier/checkpoint: https://huggingface.co/google/flan-t5-xl
         self.model_id = "google/flan-t5-xl"
 
-        # Instantiate tokenizer and model
-        # self.tokenizer = AutoTokenizer.from_pretrained(self.model_id, legacy=False)
-        # self.model = LLamaForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.float16, device_map="auto")
-
-        ## 
+        ## Instantiate tokenizer and model
         self.tokenizer = T5Tokenizer.from_pretrained("google/flan-t5-xl")
         self.model = T5ForConditionalGeneration.from_pretrained(self.model_id, device_map="auto")
         
@@ -36,10 +32,6 @@ class OpenLLAMAChatGeneration:
         with open('/home/alan/catkin_ws/src/voice_command_interface/src/init_info.txt', 'r') as file:
             ## Read the contents of the file into a string
             self.file_contents = file.read()
-
-        # # Now, file_contents contains the contents of the file as a string
-        # print(file_contents)
-
 
     def generate_response(self, prompt, max_length=1000):
         '''
@@ -58,7 +50,7 @@ class OpenLLAMAChatGeneration:
         #                 "return the order of actions based on this voice command if it's on the provided list; if not, let the user know you can't perform the specific task: " + prompt)
         #                 # "return the order of actions based on this voice command: " + prompt)
         
-        ##
+        ## Combine voice command with initial information
         request = self.file_contents + prompt
         
         ##
@@ -66,6 +58,7 @@ class OpenLLAMAChatGeneration:
         generation_output = self.model.generate(input_ids=input_ids, max_length=max_length)
         response = self.tokenizer.decode(generation_output[0])
         
+        ##
         return response.lstrip('<pad>').rstrip('</s>').strip()
 
 if __name__ == "__main__":
