@@ -43,9 +43,6 @@ class PoseEstimation():
         ## 
         self.message_count = 0
 
-        ## 
-        self.target_frame = "base_link"
-
         ##
         self.output_directory = "/home/alan/catkin_ws/src/voice_command_interface/src"
 
@@ -89,67 +86,39 @@ class PoseEstimation():
         ## Dictionary to store pose information for each detected object    
         pose_dict = {}
 
-        ## 
-        self.header = img_msg.header
-        print(self.header)
-        print(yolo_msg.header)
-        # transformation_matrix = self.get_transform_matrix(self.target_frame, img_msg.header)
-
-
         ## Loop through YOLO detections and compute pose for each
         for detection in yolo_msg.detections.detections:
             bbox_x_center = int(detection.bbox.center.x)
             bbox_y_center = int(detection.bbox.center.y)
             
-            camera_pose_estimation = self.compute_pose(bbox_x_center,bbox_y_center,cv_image,img_msg.header)
-            print(camera_pose_estimation.point)
-            print()
-        #     # Check if all elements in pose are zero
-        #     if all(element == 0 for element in camera_pose_estimation):
-        #         continue
-        #     else:
-        #         camera_pose_estimation = np.append(camera_pose_estimation, [[1]],axis=0)
+            coordinate_estimation = self.compute_coordinates(bbox_x_center,bbox_y_center,cv_image,img_msg.header)
 
-        #     # print(camera_pose_estimation)
-        #     # print(transformation_matrix)
-        #     # print()
-        #     # Perform matrix multiplication to transform the coordinates
-        #     # if camera_pose_estimation is not None:
-        #     transformed_coordinates = np.dot(transformation_matrix, camera_pose_estimation)
+            for result in detection.results:
+                ## Include search below:
+                obj = self.model.names[result.id]
 
-        #     # print(transformed_coordinates)
-            
-        #     for result in detection.results:
-        #         ## Include search below:
-        #         obj = self.model.names[result.id]
+                pose_dict[obj] = [coordinate_estimation.point.x,
+                                  coordinate_estimation.point.y,
+                                  coordinate_estimation.point.z]
+        ##
+        self.list_of_dictionaries.append(pose_dict)
 
-        #         pose_dict[obj] = [transformed_coordinates[0][0],
-        #                           transformed_coordinates[1][0],
-        #                           transformed_coordinates[2][0]]
+        ##
+        self.message_count += 1
 
-        #         # pose_dict[obj] = [camera_pose_estimation[0][0],
-        #         #                   camera_pose_estimation[1][0],
-        #         #                   camera_pose_estimation[2][0]]
+        ## 
+        if self.message_count == 10:
+            ## Find the largest pose_dict in the list_of_dictionaries
+            largest_pose_dict = max(self.list_of_dictionaries, key=len)
+            print(largest_pose_dict)
+            # print()
 
-        # ##
-        # self.list_of_dictionaries.append(pose_dict)
-
-        # ##
-        # self.message_count += 1
-
-        # ## 
-        # if self.message_count == 10:
-        #     ## Find the largest pose_dict in the list_of_dictionaries
-        #     largest_pose_dict = max(self.list_of_dictionaries, key=len)
-        #     print(largest_pose_dict)
-        #     # print()
-
-        #     # self.message_count = 0
-        #     ## Save the largest pose_dict to a JSON file
-        #     self.save_to_json(largest_pose_dict)
+            # self.message_count = 0
+            ## Save the largest pose_dict to a JSON file
+            # self.save_to_json(largest_pose_dict)
 
     
-    def compute_pose(self,bbox_x_center, bbox_y_center, cv_image, header):
+    def compute_coordinates(self,bbox_x_center, bbox_y_center, cv_image, header):
         '''
         Compute 3D pose based on bounding box center and depth image.
 
@@ -161,12 +130,12 @@ class PoseEstimation():
         - header (header):
 
         Return:
-        - [x,y,z] (list): The pose estimation location of the detected object.
+        - transformed_pose (PointStamped): The pose estimation location of the detected object.
         '''
-        z = float(cv_image[bbox_y_center][bbox_x_center])
+        z = float(cv_image[bbox_y_center][bbox_x_center])/1000.0
         x = float((bbox_x_center - self.CX_DEPTH) * z / self.FX_DEPTH)
         y = float((bbox_y_center - self.CY_DEPTH) * z / self.FY_DEPTH)
-        print(x,y,z)
+
         point = PointStamped()
         point.header=header
         point.point.x = x 
@@ -181,48 +150,6 @@ class PoseEstimation():
             except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
                 pass
         
-
-
-
-    # def compute_pose(self, bbox_x_center, bbox_y_center,cv_image):
-    #     '''
-    #     Compute 3D pose based on bounding box center and depth image.
-
-    #     Parameters:
-    #     - self: The self reference.
-    #     - bbox_x_center (int): The x center location of the bounding box.
-    #     - bbox_y_center (int): The y center location of the bounding box.
-    #     - cv_image (image): OpenCV image of the headcamera data.
-
-    #     Return:
-    #     - [x,y,z] (list): The pose estimation location of the detected object.
-    #     '''
-    #     z = float(cv_image[bbox_y_center][bbox_x_center])
-    #     x = float((bbox_x_center - self.CX_DEPTH) * z / self.FX_DEPTH)
-    #     y = float((bbox_y_center - self.CY_DEPTH) * z / self.FY_DEPTH)
-    #     arr = np.array([[x],[y],[z]])
-    #     return arr
-
-    # def get_transform_matrix(self,target_frame, hdr):
-    #     """
-    #     Get the transform matrix from the source frame to the target frame.
-
-    #     Parameters:
-    #     - source_frame (str): The source frame.
-    #     - target_frame (str): The target frame.
-    #     - timestamp (rospy.Time): The timestamp for the transform (optional).
-
-    #     Returns:
-    #     - transform_matrix (list): The 4x4 transform matrix.
-    #     """
-    #     while not rospy.is_shutdown():
-    #         try:
-    #             transform_matrix = self.listener.asMatrix(target_frame,hdr)
-    #             return transform_matrix
-
-    #         except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException) as e:
-    #             rospy.logerr(f"Error getting transform: {e}")
-    #             return None
 
     def save_to_json(self, data):
         '''
