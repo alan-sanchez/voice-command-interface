@@ -17,7 +17,7 @@ from vision_msgs.msg import Detection2D, Detection2DArray, ObjectHypothesisWithP
 from ultralytics_ros.msg import YoloResult
 from cv_bridge import CvBridge, CvBridgeError
 
-class PoseEstimation():
+class CoordinateEstimation():
     '''
     Class for estimating poses using YOLO and Primesense camera.         
     '''
@@ -34,16 +34,16 @@ class PoseEstimation():
         self.model = YOLO(f"{path}/models/{yolo_model}")
         # print(type(self.model.names))
 
-        ## 
+        ## Initialize TransformListener class
         self.listener = tf.TransformListener()
 
-        ## 
+        ## Initialize empty list
         self.list_of_dictionaries = []
 
-        ## 
+        ## Initialize counter for forloop
         self.message_count = 0
 
-        ##
+        ## Define output directory
         self.output_directory = "/home/alan/catkin_ws/src/voice_command_interface/src"
 
         ## ROS bridge for converting between ROS Image messages and OpenCV images
@@ -64,7 +64,6 @@ class PoseEstimation():
                                                             self.image_depth_sub],
                                                             queue_size=10,
                                                             slop=0.4)
-
         sync.registerCallback(self.callback_sync)        
         
         ## Log initialization notifier
@@ -83,8 +82,8 @@ class PoseEstimation():
         ## Convert ROS Image message to OpenCV image
         cv_image = self.bridge.imgmsg_to_cv2(img_msg, desired_encoding='16UC1')  
 
-        ## Dictionary to store pose information for each detected object    
-        pose_dict = {}
+        ## Dictionary to store coordinate information for each detected object    
+        coord_dict = {}
 
         ## Loop through YOLO detections and compute pose for each
         for detection in yolo_msg.detections.detections:
@@ -97,27 +96,29 @@ class PoseEstimation():
                 ## Include search below:
                 obj = self.model.names[result.id]
 
-                pose_dict[obj] = [coordinate_estimation.point.x,
+                ## add key and value to dictionary               
+                coord_dict[obj] = [coordinate_estimation.point.x,
                                   coordinate_estimation.point.y,
                                   coordinate_estimation.point.z]
-        ##
+
+        ## append the dictionary to list 
         self.list_of_dictionaries.append(pose_dict)
 
-        ##
+        ## Increment counter by 1
         self.message_count += 1
 
-        ## 
+        ## Use conditional statement to stop after 10 callbacks
         if self.message_count == 10:
             ## Find the largest pose_dict in the list_of_dictionaries
             largest_pose_dict = max(self.list_of_dictionaries, key=len)
-            print(largest_pose_dict)
-            # print()
 
-            # self.message_count = 0
             ## Save the largest pose_dict to a JSON file
-            # self.save_to_json(largest_pose_dict)
+            self.save_to_json(largest_pose_dict)
 
-    
+            ## Close the node
+            rospy.signal_shutdown("Function completed, shutting down node.")
+
+
     def compute_coordinates(self,bbox_x_center, bbox_y_center, cv_image, header):
         '''
         Compute 3D pose based on bounding box center and depth image.
@@ -126,26 +127,31 @@ class PoseEstimation():
         - self: The self reference.
         - bbox_x_center (int): The x center location of the bounding box.
         - bbox_y_center (int): The y center location of the bounding box.
-        - cv_image (image): OpenCV image of the headcamera data.
-        - header (header):
+        - cv_image (image): OpenCV image of the head camera data.
+        - header (header): the header information of the head camera. 
 
         Return:
-        - transformed_pose (PointStamped): The pose estimation location of the detected object.
+        - transformed_point (PointStamped): The coordinate estimation of the detected object.
         '''
-        z = float(cv_image[bbox_y_center][bbox_x_center])/1000.0
+        ## Extract depth value from the depth image at the center of the bounding box
+        z = float(cv_image[bbox_y_center][bbox_x_center])/1000.0 # Depth values are typically in millimeters, convert to meters
+
+        ## Calculate x and y coordinates using depth information and camera intrinsics
         x = float((bbox_x_center - self.CX_DEPTH) * z / self.FX_DEPTH)
         y = float((bbox_y_center - self.CY_DEPTH) * z / self.FY_DEPTH)
 
+        ## Create a PointStamped object to store the computed coordinates
         point = PointStamped()
         point.header=header
         point.point.x = x 
         point.point.y = y 
         point.point.z = z 
 
+        ## Loop until ROS shutdown, attempting to transform the point to '/base_link' frame
         while not rospy.is_shutdown():
             try:
-                transformed_pose = self.listener.transformPoint('/base_link', point)
-                return transformed_pose
+                transformed_point = self.listener.transformPoint('/base_link', point)
+                return transformed_point
 
             except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
                 pass
@@ -153,22 +159,25 @@ class PoseEstimation():
 
     def save_to_json(self, data):
         '''
+        Save data to a JSON file.
 
+        Parameters:
+        - data: The data to be saved to the JSON file.
         '''
-        # Ensure the specified directory exists
+        ## Ensure the specified directory exists
         if not os.path.exists(self.output_directory):
             os.makedirs(self.output_directory)
 
-        # Save the data to a JSON file in the specified directory
+        ## Save the data to a JSON file in the specified directory
         json_file_path = os.path.join(self.output_directory, 'largest_pose_dict.json')
         with open(json_file_path, 'w') as json_file:
             json.dump(data, json_file, indent=2)
-    
         
+                
 if __name__=="__main__":
     ## Initialize irradiance_vectors node
-    rospy.init_node('yolo_pose_estimation',anonymous=True)
+    rospy.init_node('yolo_coord_estimation',anonymous=True)
 
-    ## Instantiate the `PoseEstimation` class
-    PoseEstimation()
+    ## Instantiate the `CoordinateEstimation` class
+    CoordinateEstimation()
     rospy.spin()
