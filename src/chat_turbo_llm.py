@@ -17,7 +17,7 @@ class TextGeneration:
         - self: The self reference.
         - model_id (str): large language model identifier.
         '''
-        ## 
+        ## Pull and set key for openai
         self.model_id = model
         key = os.environ.get("openai_key")
         self.client = OpenAI(api_key=key)
@@ -39,11 +39,12 @@ class TextGeneration:
         Returns:
         - response (str): The generated response.
         '''
+        text_content = self.file_contents + prompt
         chat_completion = self.client.chat.completions.create(
             messages=[
                 {
                     "role": "user",
-                    "content": "Say this is a test",
+                    "content": text_content,
                 }
             ],
             model="gpt-3.5-turbo", #"gpt-4"

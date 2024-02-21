@@ -1,27 +1,28 @@
 #!/usr/bin/env python3
 
 ## Import python libraries
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 import torch
-import gradio as gr
 import whisper
-import openai
+import os
+import gradio as gr
+from openai import OpenAI
 
 class TaskGenerationAndSpeechToText:
     '''
     A class that combines task generation and speech-to-text functionality.
     '''
-    def __init__(self):
+    def __init__(self, model = "gpt-3.5-turbo"):
         '''
-        A constructor that initializes the tokenizer, model, and Gradio interface.
+         A constructor that initializes the tokenizer and model.
 
         Parameters:
         - self: The self reference.
+        - model_id (str): large language model identifier.
         '''
-        ## Task generation setup
-        self.fastchat_model_id = "lmsys/fastchat-t5-3b-v1.0" # Provide the model id/checkpoint
-        self.fastchat_tokenizer = AutoTokenizer.from_pretrained(self.fastchat_model_id, legacy=False)
-        self.fastchat_model = AutoModelForSeq2SeqLM.from_pretrained(self.fastchat_model_id, torch_dtype=torch.float16, device_map="auto")
+        ## Pull and set key for openai
+        self.model_id = model
+        key = os.environ.get("openai_key")
+        self.client = OpenAI(api_key=key)
 
         ## Speech-to-text setup
         self.whisper_model = whisper.load_model("base")  # tiny, base, small, medium, large
@@ -33,26 +34,36 @@ class TaskGenerationAndSpeechToText:
             outputs="text"
         )
 
+        ## Open the file in read mode
+        with open('/home/alan/catkin_ws/src/voice_command_interface/src/init_info.txt', 'r') as file:
+            ## Read the contents of the file into a string
+            self.file_contents = file.read()
+
     def generate_response(self, prompt, max_length=1000):
         '''
-        A function that generates a text response based on the provided prompt.
+        A function that generates a text response.
 
         Parameters:
-        - self: The self referentce. 
+        - self: The self reference.
         - prompt (str): The user's input prompt.
         - max_length (int): The maximum length of the generated response.
 
         Returns:
         - response (str): The generated response.
         '''
-        ## Create initial information for the voice command
-        init_info = f"Here is a list of actions that a robot can perform: clean table, clean mug, clean phone, clean bowl, clean keyboard, clean cup, clean spoon, clean knife, clean plate. Return the order of actions based on this voice command: {prompt}"
-        
-        ## Create the input ids from tokenizer
-        input_ids = self.fastchat_tokenizer(init_info, return_tensors="pt").input_ids.to("cuda")
-        generation_output = self.fastchat_model.generate(input_ids=input_ids, max_length=max_length)
-        response = self.fastchat_tokenizer.decode(generation_output[0])
-        return response.lstrip('<pad>').rstrip('</s>').strip()
+        text_content = self.file_contents + prompt
+        chat_completion = self.client.chat.completions.create(
+            messages=[
+                {
+                    "role": "user",
+                    "content": text_content,
+                }
+            ],
+            model="gpt-3.5-turbo", #"gpt-4"
+        )
+
+        return chat_completion.choices[0].message.content
+
 
     def process_input(self, filepath):
         '''
