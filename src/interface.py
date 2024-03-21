@@ -47,7 +47,3 @@ if __name__ == '__main__':
     ## Instantiate the `SpeechToText` class and run the web interface
     cmd = SpeechToText()
     cmd.run_app()
-
-# openai.api_key = "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"
-# audio = open(filepath, "rb")
-# transcribe = openai.Audio.transcribe("whisper-1",audio)
