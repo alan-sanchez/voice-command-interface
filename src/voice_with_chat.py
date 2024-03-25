@@ -4,8 +4,12 @@
 import torch
 import whisper
 import os
+import rospy
 import gradio as gr
+
 from openai import OpenAI
+from voice_command_interface.srv import Coordinates, CoordinatesResponse 
+
 
 class TaskGenerationAndSpeechToText:
     '''
@@ -24,6 +28,9 @@ class TaskGenerationAndSpeechToText:
         key = os.environ.get("openai_key")
         self.client = OpenAI(api_key=key)
 
+        ## 
+        rospy.wait_for_service('coordinates')
+        self.coordinates = rospy.ServiceProxy('coordinates', Coordinates)
         ## Speech-to-text setup
         self.whisper_model = whisper.load_model("base")  # tiny, base, small, medium, large
 
@@ -51,6 +58,16 @@ class TaskGenerationAndSpeechToText:
         Returns:
         - response (str): The generated response.
         '''
+        try:
+            answer = self.coordinates(1)
+        except rospy.ServiceException as e:
+            rospy.logwarn('Service call failed for')
+
+        converter = str(answer)
+        objects_and_coordinates = converter.replace("\n","").replace("  ","").replace("\\","")#.replace("coordinates: ","").replace("''","")
+        print(objects_and_coordinates)
+
+
         text_content = self.file_contents + prompt
         chat_completion = self.client.chat.completions.create(
             messages=[
@@ -63,6 +80,9 @@ class TaskGenerationAndSpeechToText:
         )
 
         return chat_completion.choices[0].message.content
+
+
+        # return converter
 
 
     def process_input(self, filepath):

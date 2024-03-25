@@ -17,6 +17,9 @@ from vision_msgs.msg import Detection2D, Detection2DArray, ObjectHypothesisWithP
 from ultralytics_ros.msg import YoloResult
 from cv_bridge import CvBridge, CvBridgeError
 
+##
+from voice_command_interface.srv import Coordinates, CoordinatesResponse 
+
 class CoordinateEstimation():
     '''
     Class for estimating poses using YOLO and Primesense camera.         
@@ -34,11 +37,18 @@ class CoordinateEstimation():
         self.model = YOLO(f"{path}/models/{yolo_model}")
         # print(type(self.model.names))
 
+        ## Create the service, specifiying the name, the service message base type
+        ## and the callback function
+        self.service = rospy.Service('coordinates', Coordinates, self.callback_srv)
+
         ## Initialize TransformListener class
         self.listener = tf.TransformListener()
 
         ## Initialize empty list
         self.list_of_dictionaries = []
+
+        ## Initialize cooridnates. This will be the reponse for service call
+        self.objects_and_coordinates = None
 
         ## Initialize counter for forloop
         self.message_count = 0
@@ -69,6 +79,10 @@ class CoordinateEstimation():
         ## Log initialization notifier
         rospy.loginfo('{}: is ready.'.format(self.__class__.__name__))
 
+    def callback_srv(self,request):
+        rospy.loginfo("Received Request")
+        
+        return CoordinatesResponse(self.objects_and_coordinates)
 
     def callback_sync(self,yolo_msg, img_msg):
         '''
@@ -97,12 +111,12 @@ class CoordinateEstimation():
                 obj = self.model.names[result.id]
 
                 ## add key and value to dictionary               
-                coord_dict[obj] = [coordinate_estimation.point.x,
-                                  coordinate_estimation.point.y,
-                                  coordinate_estimation.point.z]
+                coord_dict[obj] = [round(coordinate_estimation.point.x,2),
+                                   round(coordinate_estimation.point.y,2),
+                                   round(coordinate_estimation.point.z,2)]
 
         ## append the dictionary to list 
-        self.list_of_dictionaries.append(pose_dict)
+        self.list_of_dictionaries.append(coord_dict)
 
         ## Increment counter by 1
         self.message_count += 1
@@ -110,14 +124,9 @@ class CoordinateEstimation():
         ## Use conditional statement to stop after 10 callbacks
         if self.message_count == 10:
             ## Find the largest pose_dict in the list_of_dictionaries
-            largest_pose_dict = max(self.list_of_dictionaries, key=len)
-
-            ## Save the largest pose_dict to a JSON file
-            self.save_to_json(largest_pose_dict)
-
-            ## Close the node
-            rospy.signal_shutdown("Function completed, shutting down node.")
-
+            self.objects_and_coordinates = str(max(self.list_of_dictionaries, key=len))
+            self.message_count = 0
+            self.list_of_dictionaries[:]=[]
 
     def compute_coordinates(self,bbox_x_center, bbox_y_center, cv_image, header):
         '''
@@ -155,23 +164,6 @@ class CoordinateEstimation():
 
             except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
                 pass
-        
-
-    def save_to_json(self, data):
-        '''
-        Save data to a JSON file.
-
-        Parameters:
-        - data: The data to be saved to the JSON file.
-        '''
-        ## Ensure the specified directory exists
-        if not os.path.exists(self.output_directory):
-            os.makedirs(self.output_directory)
-
-        ## Save the data to a JSON file in the specified directory
-        json_file_path = os.path.join(self.output_directory, 'largest_pose_dict.json')
-        with open(json_file_path, 'w') as json_file:
-            json.dump(data, json_file, indent=2)
         
                 
 if __name__=="__main__":
