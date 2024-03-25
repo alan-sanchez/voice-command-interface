@@ -9,7 +9,7 @@ class TextGeneration:
     '''
     A class for generating responses using the FastChat T5-based model.
     '''
-    def __init__(self, model = "gpt-3.5-turbo"):
+    def __init__(self, model = "gpt-4"):
         '''
         A constructor that initializes the tokenizer and model.
 
@@ -47,7 +47,7 @@ class TextGeneration:
                     "content": text_content,
                 }
             ],
-            model="gpt-3.5-turbo", #"gpt-4"
+            model=self.model_id#"gpt-4"
         )
 
         return chat_completion.choices[0].message.content
