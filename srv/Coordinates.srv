@@ -1,0 +1,5 @@
+# inputs
+int64 flag
+---
+# outputs
+string coordinates
