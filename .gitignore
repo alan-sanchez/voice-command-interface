@@ -3,4 +3,5 @@
 /models/*
 /src/interface.py
 /chat_turbo_llm.py
-
+/src/image_capture*
+/src/camera_image*
