@@ -4,6 +4,7 @@
 import rospy
 import sys
 import signal
+import tf
 import json
 import actionlib
 import moveit_commander 
@@ -12,6 +13,7 @@ import moveit_msgs.msg
 ## Import message types and other python libraries
 from moveit_python import PlanningSceneInterface, MoveGroupInterface
 from moveit_msgs.msg import MoveItErrorCodes
+from geometry_msgs.msg import  Pose, Point, Quaternion
 from robot_controllers_msgs.msg import QueryControllerStatesAction, QueryControllerStatesGoal, ControllerState
 
 # Define a class attribute or a global variable as a flag
@@ -61,11 +63,14 @@ class Record:
         self.scene = PlanningSceneInterface("base_link")
         self.scene.addBox("keepout", 0.25, 0.5, 0.09, 0.15, 0.0, 0.375)
 
-        # Create the list of joints
+        ## Create the list of joints
         self.joints = ["torso_lift_joint", "shoulder_pan_joint", "shoulder_lift_joint", "upperarm_roll_joint",
                   "elbow_flex_joint", "forearm_roll_joint", "wrist_flex_joint", "wrist_roll_joint"]
         
+        ##
+        self.listener = tf.TransformListener()
 
+        ##
         controller_states = "/query_controller_states"
 
         self._controller_client = actionlib.SimpleActionClient(controller_states,QueryControllerStatesAction)
@@ -76,6 +81,7 @@ class Record:
         self._non_gravity_comp_controllers = list()
         self._non_gravity_comp_controllers.append("arm_controller/follow_joint_trajectory")
         self._non_gravity_comp_controllers.append("arm_with_torso_controller/follow_joint_trajectory")
+
 
     def init_pose(self, vel = 0.2):
         """
@@ -95,7 +101,8 @@ class Record:
             if result and result.error_code.val == MoveItErrorCodes.SUCCESS:
                 self.scene.removeCollisionObject("keepout")
                 return 0 
-                    
+
+
     def relax_arm(self):
         '''
         Turns on gravity compensation controller and turns
@@ -117,31 +124,82 @@ class Record:
 
         self._controller_client.send_goal(goal)
 
+
     def record(self):
+        '''
+
+        '''
         global interrupted
         pose_arr = []
-       
+
         while not interrupted:
-            joints_arr = self.group.get_current_joint_values()
+            joints_arr = self.ee_pose()
             # Check if all joint values are not zero before appending
-            if not all(value == 0 for value in joints_arr):
+            if any(value != 0 for value in joints_arr):
                 pose_arr.append(joints_arr)
             rospy.sleep(1)
         
-        
         file_name = raw_input('\nname your movement file: ')
 
-        dictionary = {
-            "poses": pose_arr,
-        }
-
-        json_object = json.dumps(dictionary, indent=4)
+        json_object = json.dumps(pose_arr, indent=4)
         with open(file_name + '.json', 'w') as outfile:
             outfile.write(json_object)
         
         # Reset interrupted flag
         interrupted = False
+
+
+    def ee_pose(self):
+        '''
+        Function thatfinds the pose of the `gripper_link` relative to the `base_link` frame.
+        :param self: The self reference.
+
+        :return [trans, rot]: The pose message type.
+        '''
+        while not rospy.is_shutdown():
+            try:
+                (trans,rot) = self.listener.lookupTransform( '/base_link', '/gripper_link',rospy.Time(0))
+                trans = [round(p,3) for p in trans]
+                rot = [round(r,2) for r in rot]
+                return trans + rot
+
+            except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
+                pass
+
+
+    def playback(self):
+        file_name = raw_input('\nEnter the name of the movement file you wish to replay: ')
+        with open(file_name + '.json') as user_file:
+            poses = json.load(user_file)
         
+        # print(poses_object)
+        # print(len(poses),type(poses))
+        waypoints = []
+        for ps in poses:
+            new_pose = Pose(Point(ps[0], ps[1], ps[2]),Quaternion(ps[3], ps[4], ps[5], ps[6]))
+            waypoints.append(new_pose)
+        
+        # print(waypoints, type(waypoints))
+        # # allow replanning until the waypoints reached in plan is over 90%
+        fraction = 0
+        count = 0
+        
+        (plan, fraction) = self.group.compute_cartesian_path(waypoints, # waypoints to follow
+                                                        0.01,      # eef_step
+                                                        0.00)      # jump_threshold
+
+        plan = self.group.retime_trajectory(self.robot.get_current_state(),
+                                        plan,
+                                        velocity_scaling_factor = 0.2,
+                                        acceleration_scaling_factor = .2,
+                                        )
+
+        if fraction > 0.9:
+            self.group.execute(plan, wait=True)
+        else:
+            print("nope", fraction)# rospy.WARN("Could not plan the cartesian path")
+
+
 if __name__ == '__main__':
     ## Initialize the `relax_arm_control` node
     rospy.init_node('record')
@@ -157,9 +215,11 @@ if __name__ == '__main__':
     # raw_input("My arm is in relax mode. You can move it and hover it above the center top of the object you want me to disinfect. Once you have done that, press Enter.")
     
     # raw_input("I will start recording the cleaning task once you press enter")
-    obj.record()
+    # obj.record()
     ## Notify user that they can move the arm
     # rospy.loginfo("Relaxed arm node activated. You can now move the manipulator")
     # print()
+
+    obj.playback()
     rospy.loginfo("Type Ctrl + C when you are done recording")
     rospy.spin()
