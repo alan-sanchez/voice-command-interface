@@ -71,12 +71,11 @@ class Record:
         ##
         self.listener = tf.TransformListener()
 
-        # Specify the relative path from the home directory and construct the full path using the user's home directory
+        ## Specify the relative path from the home directory and construct the full path using the user's home directory
         relative_path = 'catkin_ws/src/voice_command_interface/tool_paths'
         self.full_path = os.path.join(os.environ['HOME'], relative_path)
         self.file = None
-        
-        
+                
         ##
         controller_states = "/query_controller_states"
 
@@ -108,75 +107,6 @@ class Record:
             if result and result.error_code.val == MoveItErrorCodes.SUCCESS:
                 self.scene.removeCollisionObject("keepout")
                 return 0 
-
-
-    def relax_arm(self):
-        '''
-        Turns on gravity compensation controller and turns
-        off other controllers
-        '''
-        goal = QueryControllerStatesGoal()
-
-        for controller in self._gravity_comp_controllers:
-            state = ControllerState()
-            state.name = controller
-            state.state = state.RUNNING
-            goal.updates.append(state)
-
-        for controller in self._non_gravity_comp_controllers:
-            state = ControllerState()
-            state.name = controller
-            state.state = state.STOPPED
-            goal.updates.append(state)
-
-        self._controller_client.send_goal(goal)
-
-
-    def record(self):
-        '''
-
-        '''
-        global interrupted
-        pose_arr = []
-        print("\nRecording movement...\n")
-        print("\nPress ctrl+c to stop recording and save to file\n")
-        while not interrupted:
-            joints_arr = self.ee_pose()
-            # Check if all joint values are not zero before appending
-            if any(value != 0 for value in joints_arr):
-                pose_arr.append(joints_arr)
-            rospy.sleep(1)
-        
-        file_name = raw_input('\nname your movement file: ')
-
-        ## Construct the full file path
-        file_path = os.path.join(self.full_path, file_name + '.json')
-
-        ## 
-        json_object = json.dumps(pose_arr, indent=4)
-        with open(file_path, 'w') as outfile:
-            outfile.write(json_object)
-        
-        ## Reset interrupted flag
-        interrupted = False
-
-
-    def ee_pose(self):
-        '''
-        Function thatfinds the pose of the `gripper_link` relative to the `base_link` frame.
-        :param self: The self reference.
-
-        :return [trans, rot]: The pose message type.
-        '''
-        while not rospy.is_shutdown():
-            try:
-                (trans,rot) = self.listener.lookupTransform( '/base_link', '/gripper_link',rospy.Time(0))
-                trans = [round(p,3) for p in trans]
-                rot = [round(r,2) for r in rot]
-                return trans + rot
-
-            except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
-                pass
 
 
     def playback(self):
@@ -222,15 +152,18 @@ if __name__ == '__main__':
     ## Instantiate the `ArmControl()` object
     obj = Record()
 
-    raw_input("Press enter to move Fetch to it's initial arm configuration")
-    obj.init_pose()
-    print("")
+    # raw_input("Press enter to move Fetch to it's initial arm configuration")
+    # obj.init_pose()
+    # print("")
     
-    raw_input("Press Enter to have my arm is in relax mode. \nHove my hand 6 inches above the object you want me to disinfect.")
-    obj.relax_arm()
-
-    raw_input("I will start recording the cleaning task once you press enter")
-    obj.record()
+    # obj.relax_arm()
+    # raw_input("My arm is in relax mode. You can move it and hover it above the center top of the object you want me to disinfect. Once you have done that, press Enter.")
+    
+    # raw_input("I will start recording the cleaning task once you press enter")
+    # obj.record()
+    ## Notify user that they can move the arm
+    # rospy.loginfo("Relaxed arm node activated. You can now move the manipulator")
+    # print()
 
     obj.playback()
     rospy.loginfo("Type Ctrl + C when you are done recording")
