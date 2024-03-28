@@ -17,50 +17,49 @@ from moveit_msgs.msg import MoveItErrorCodes
 from geometry_msgs.msg import  Pose, Point, Quaternion
 from robot_controllers_msgs.msg import QueryControllerStatesAction, QueryControllerStatesGoal, ControllerState
 
-# Define a class attribute or a global variable as a flag
+## Define a class attribute or a global variable as a flag
 interrupted = False
 
-# Define a signal handler function
+## Function to handle signal interruption
 def signal_handler(signal, frame):
     global interrupted
     interrupted = True
 
-# Register the signal handler
+## Assign the signal handler to the SIGINT signal
 signal.signal(signal.SIGINT, signal_handler)
 
 class Record:
     '''
-    Class for controlling mid-level operations of the arm.
+    Class for controlling mid-level operations of the arm, including moving to initial positions,
+    recording movements, and playing back movements.
     '''
     def __init__(self):
         '''
-        A function that ...
-        :param self: The self reference.
+        Initializes the robot arm control, setting up MoveIt interfaces and other necessary components.
+
+        Parameters:
+        - self: The self reference.
         '''
         rospy.loginfo("Waiting for MoveIt!")
         self.client = MoveGroupInterface("arm_with_torso", "base_link")
 
-        ## First initialize `moveit_commander`
+        ## Initialize `moveit_commander`
         moveit_commander.roscpp_initialize(sys.argv)
 
-        ## Instantiate a `RobotCommander`_ object. This object is the outer-level
-        ## interface to the robot
+        ## Instantiate a `RobotCommander`_ object, the outer-level interface to the robot
         self.robot = moveit_commander.RobotCommander()
 
-        ## Instantiate a `MoveGroupCommander`_ object.  This object is an interface
-        ## to one group of joints.
+        ## Instantiate a `MoveGroupCommander`_ object, an interface to group of joints
         self.group = moveit_commander.MoveGroupCommander("arm_with_torso")
         self.group.set_end_effector_link("gripper_link") #use gripper_link if it is planar disinfection
 
-        ## We create a `DisplayTrajectory`_ publisher which is used later to publish
-        ## trajectories for RViz to visualize:
+        ## Create a `DisplayTrajectory`_ publisher to publish trajectories for RViz to visualize
         self.display_trajectory_publisher = rospy.Publisher('/move_group/display_planned_path',
                                                        moveit_msgs.msg.DisplayTrajectory,
                                                        queue_size=20)
         rospy.loginfo("...connected")
 
-        ## Padding does not work (especially for self collisions)
-        ## So we are adding a box above the base of the robot
+        ## Setup enviroment around the robot and add a box to the scene
         self.scene = PlanningSceneInterface("base_link")
         self.scene.addBox("keepout", 0.25, 0.5, 0.09, 0.15, 0.0, 0.375)
 
@@ -68,23 +67,22 @@ class Record:
         self.joints = ["torso_lift_joint", "shoulder_pan_joint", "shoulder_lift_joint", "upperarm_roll_joint",
                   "elbow_flex_joint", "forearm_roll_joint", "wrist_flex_joint", "wrist_roll_joint"]
         
-        ##
+        ## Instantiate a `TranformListener` object
         self.listener = tf.TransformListener()
 
-        # Specify the relative path from the home directory and construct the full path using the user's home directory
+        # Contrct the path to save recorded movements
         relative_path = 'catkin_ws/src/voice_command_interface/tool_paths'
         self.full_path = os.path.join(os.environ['HOME'], relative_path)
         self.file = None
         
         
-        ##
+        ## Action client for querying controller states
         controller_states = "/query_controller_states"
-
         self._controller_client = actionlib.SimpleActionClient(controller_states,QueryControllerStatesAction)
         self._controller_client.wait_for_server()
 
+        ## Define controllers for gravity compensation
         self._gravity_comp_controllers = ["arm_controller/gravity_compensation"]
-
         self._non_gravity_comp_controllers = list()
         self._non_gravity_comp_controllers.append("arm_controller/follow_joint_trajectory")
         self._non_gravity_comp_controllers.append("arm_with_torso_controller/follow_joint_trajectory")
@@ -94,8 +92,10 @@ class Record:
         """
         Function that sends a joint goal that moves the Fetch's arm and torso to
         the initial position.
-        :param self: The self reference.
-        :param vel: Float value for arm velocity.
+
+        Parameters:
+        - self: The self reference.
+        - vel (Float): Arm velocity scaling factor.
         """
         ## List of joint values of init position
         pose =[.15, 1.41, 0.30, -0.22, -2.25, -1.56, 1.80, -0.37,]
@@ -114,27 +114,37 @@ class Record:
         '''
         Turns on gravity compensation controller and turns
         off other controllers
+
+        Parameters:
+        - self: The self reference.
         '''
+        ## Initialize a goal for the QueryControllerStates action,
         goal = QueryControllerStatesGoal()
 
+        ## Loop over the list of controllers that should be in gravity compensation mode
         for controller in self._gravity_comp_controllers:
             state = ControllerState()
             state.name = controller
             state.state = state.RUNNING
             goal.updates.append(state)
 
+        ## Loop over the list of controllers that should not be in gravity compensation mode
         for controller in self._non_gravity_comp_controllers:
             state = ControllerState()
             state.name = controller
             state.state = state.STOPPED
             goal.updates.append(state)
-
+        
+        ## Send the assembled goal to the action server responsible for controller state management
         self._controller_client.send_goal(goal)
 
 
     def record(self):
         '''
+        A function that records the human-guided motions
 
+        Parameters:
+        - self: The self reference.
         '''
         global interrupted
         pose_arr = []
@@ -222,16 +232,40 @@ if __name__ == '__main__':
     ## Instantiate the `ArmControl()` object
     obj = Record()
 
-    raw_input("Press enter to move Fetch to it's initial arm configuration")
-    obj.init_pose()
-    print("")
+    # outer loop controlling create movement or play movement
+    while(True):
+        print("\n\nEnter 1 to move to the initial arm configuration\nEnter 2 to record a motion\nEnter 3 to playback a trajectory\nEnter 4 to quit\n")
+        control_selection = input("Choose an option: ")
+
+        ## sub loop controlling add a movement feature
+        if control_selection == 1:
+            obj.init_pose()
+                        
+        ## play back a movement from file
+        elif control_selection == 2:
+            print("My arm is in relax mode. \nHover my hand 6 inches above the object you want me to disinfect.")
+            obj.relax_arm()
+
+            raw_input("I will start recording the cleaning task once you press enter")
+            obj.record()
+
+        elif control_selection == 3:
+            obj.playback()
+
+        elif control_selection == 4:
+            break
+
+        else:
+            print("\nInvalid selection\n")
     
-    raw_input("Press Enter to have my arm is in relax mode. \nHove my hand 6 inches above the object you want me to disinfect.")
-    obj.relax_arm()
 
-    raw_input("I will start recording the cleaning task once you press enter")
-    obj.record()
+    # # raw_input("Press enter to move Fetch to it's initial arm configuration")
+    # # obj.init_pose()
+    # # print("")
+    
+    # # raw_input("Press Enter to have my arm is in relax mode. \nHove my hand 6 inches above the object you want me to disinfect.")
+    
 
-    obj.playback()
-    rospy.loginfo("Type Ctrl + C when you are done recording")
-    rospy.spin()
+    
+    # rospy.loginfo("Type Ctrl + C when you are done recording")
+    # rospy.spin()
