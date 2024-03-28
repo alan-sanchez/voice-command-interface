@@ -6,4 +6,4 @@
 /src/image_capture*
 /src/camera_image*
 /src/LLM*
-/src/chat_turbo_llm
+/src/chat_turbo_llm.py
