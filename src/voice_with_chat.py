@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
 
 ## Import python libraries
-import torch
 import whisper
 import os
 import rospy
 import gradio as gr
 
 from openai import OpenAI
-from voice_command_interface.srv import Coordinates, CoordinatesResponse 
-
+from voice_command_interface.srv import Coordinates 
 
 class TaskGenerationAndSpeechToText:
     '''
@@ -23,6 +21,10 @@ class TaskGenerationAndSpeechToText:
         - self: The self reference.
         - model_id (str): large language model identifier.
         '''
+        ## Initiate publisher
+        self.duration_pub  = rospy.Publisher('duration', Float32, queue_size=10)
+       
+        
         ## Pull and set key for openai
         self.model_id = model
         key = os.environ.get("openai_key")
@@ -31,6 +33,7 @@ class TaskGenerationAndSpeechToText:
         ## 
         rospy.wait_for_service('coordinates')
         self.coordinates = rospy.ServiceProxy('coordinates', Coordinates)
+        
         ## Speech-to-text setup
         self.whisper_model = whisper.load_model("base")  # tiny, base, small, medium, large
 
@@ -42,11 +45,21 @@ class TaskGenerationAndSpeechToText:
         )
 
         ## Open the file in read mode
-        with open('/home/alan/catkin_ws/src/voice_command_interface/src/init_info.txt', 'r') as file:
-            ## Read the contents of the file into a string
-            self.file_contents = file.read()
+        ## Specify the relative path from the home directory and construct the full path using the user's home directory
+        relative_path = 'catkin_ws/src/voice_command_interface/prompts'
+        action_list_dir = os.path.join(os.environ['HOME'], relative_path, 'action_list.txt')
+        examples_dir = os.path.join(os.environ['HOME'], relative_path, 'examples.txt')
 
-    def generate_response(self, prompt, max_length=1000):
+        with open(action_list_dir, 'r') as file:
+            ## Read the contents of the file into a string
+            self.action_list_prompt = file.read()
+
+        with open(examples_dir, 'r') as file:
+            ## Read the contents of the file into a string
+            self.examples_prompt = file.read()
+
+
+    def generate_response(self, voice_cmd, max_length=1000):
         '''
         A function that generates a text response.
 
@@ -64,25 +77,22 @@ class TaskGenerationAndSpeechToText:
             rospy.logwarn('Service call failed for')
 
         converter = str(answer)
-        objects_and_coordinates = converter.replace("\n","").replace("  ","").replace("\\","")#.replace("coordinates: ","").replace("''","")
-        print(objects_and_coordinates)
+        objects_and_coordinates = converter.replace("\n","").replace("  ","").replace("\\","")
 
-
-        text_content = self.file_contents + prompt
+        prompt = self.action_list_prompt + objects_and_coordinates + self.examples_prompt + voice_cmd
+        # print(prompt)
+        
         chat_completion = self.client.chat.completions.create(
             messages=[
                 {
                     "role": "user",
-                    "content": text_content,
+                    "content": prompt,
                 }
             ],
             model="gpt-3.5-turbo", #"gpt-4"
         )
 
         return chat_completion.choices[0].message.content
-
-
-        # return converter
 
 
     def process_input(self, filepath):
@@ -105,6 +115,7 @@ class TaskGenerationAndSpeechToText:
 
         ## Print the Transcript and LLM response in gradio
         return f"Transcript: {transcribe}\nGenerated Response: {generated_response}"
+
 
     def run_interface(self):
         '''
