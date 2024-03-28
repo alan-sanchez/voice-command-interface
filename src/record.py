@@ -3,6 +3,7 @@
 ## Import modules
 import rospy
 import sys
+import os
 import signal
 import tf
 import json
@@ -70,6 +71,12 @@ class Record:
         ##
         self.listener = tf.TransformListener()
 
+        # Specify the relative path from the home directory and construct the full path using the user's home directory
+        relative_path = 'catkin_ws/src/voice_command_interface/tool_paths'
+        self.full_path = os.path.join(os.environ['HOME'], relative_path)
+        self.file = None
+        
+        
         ##
         controller_states = "/query_controller_states"
 
@@ -131,7 +138,8 @@ class Record:
         '''
         global interrupted
         pose_arr = []
-
+        print("\nRecording movement...\n")
+        print("\nPress ctrl+c to stop recording and save to file\n")
         while not interrupted:
             joints_arr = self.ee_pose()
             # Check if all joint values are not zero before appending
@@ -141,11 +149,15 @@ class Record:
         
         file_name = raw_input('\nname your movement file: ')
 
+        ## Construct the full file path
+        file_path = os.path.join(self.full_path, file_name + '.json')
+
+        ## 
         json_object = json.dumps(pose_arr, indent=4)
-        with open(file_name + '.json', 'w') as outfile:
+        with open(file_path, 'w') as outfile:
             outfile.write(json_object)
         
-        # Reset interrupted flag
+        ## Reset interrupted flag
         interrupted = False
 
 
@@ -169,7 +181,10 @@ class Record:
 
     def playback(self):
         file_name = raw_input('\nEnter the name of the movement file you wish to replay: ')
-        with open(file_name + '.json') as user_file:
+        ## Construct the full file path
+        file_path = os.path.join(self.full_path, file_name + '.json')
+        print(file_path,type(file_path))
+        with open(file_path) as user_file:
             poses = json.load(user_file)
         
         # print(poses_object)
@@ -191,13 +206,13 @@ class Record:
         plan = self.group.retime_trajectory(self.robot.get_current_state(),
                                         plan,
                                         velocity_scaling_factor = 0.2,
-                                        acceleration_scaling_factor = .2,
+                                        acceleration_scaling_factor = 0.2,
                                         )
 
         if fraction > 0.9:
             self.group.execute(plan, wait=True)
         else:
-            print("nope", fraction)# rospy.WARN("Could not plan the cartesian path")
+            rospy.WARN("Could not plan the cartesian path")
 
 
 if __name__ == '__main__':
@@ -207,18 +222,15 @@ if __name__ == '__main__':
     ## Instantiate the `ArmControl()` object
     obj = Record()
 
-    # raw_input("Press enter to move Fetch to it's initial arm configuration")
-    # obj.init_pose()
-    # print("")
+    raw_input("Press enter to move Fetch to it's initial arm configuration")
+    obj.init_pose()
+    print("")
     
-    # obj.relax_arm()
-    # raw_input("My arm is in relax mode. You can move it and hover it above the center top of the object you want me to disinfect. Once you have done that, press Enter.")
-    
-    # raw_input("I will start recording the cleaning task once you press enter")
-    # obj.record()
-    ## Notify user that they can move the arm
-    # rospy.loginfo("Relaxed arm node activated. You can now move the manipulator")
-    # print()
+    raw_input("Press Enter to have my arm is in relax mode. \nHove my hand 6 inches above the object you want me to disinfect.")
+    obj.relax_arm()
+
+    raw_input("I will start recording the cleaning task once you press enter")
+    obj.record()
 
     obj.playback()
     rospy.loginfo("Type Ctrl + C when you are done recording")
