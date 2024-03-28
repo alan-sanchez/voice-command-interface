@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 ## Import python libraries
-import torch
 import os
 from openai import OpenAI
 
