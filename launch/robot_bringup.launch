@@ -1,0 +1,11 @@
+<launch>
+    <!-- Launch move group -->
+    <include file="$(find uv_project)/launch/move_group.launch" />
+
+    <!-- Launch primesense (head camera) octomap settings -->
+    <include file="$(find uv_project)/launch/octomap_primesense_setup.launch">
+        <arg name="resolution" value="$(arg resolution)" />
+    </include>
+ 
+    
+</launch>
