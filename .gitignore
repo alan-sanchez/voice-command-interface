@@ -7,3 +7,4 @@
 /src/camera_image*
 /src/LLM*
 /src/chat_turbo_llm.py
+/src/image_embedding.py
