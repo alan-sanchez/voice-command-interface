@@ -8,6 +8,8 @@ import gradio as gr
 
 from openai import OpenAI
 from voice_command_interface.srv import Coordinates 
+from std_msgs.msg import String
+
 
 class TaskGenerationAndSpeechToText:
     '''
@@ -22,15 +24,14 @@ class TaskGenerationAndSpeechToText:
         - model_id (str): large language model identifier.
         '''
         ## Initiate publisher
-        self.duration_pub  = rospy.Publisher('duration', Float32, queue_size=10)
+        self.task_publisher = rospy.Publisher('task', String, queue_size=10)
        
-        
         ## Pull and set key for openai
         self.model_id = model
         key = os.environ.get("openai_key")
         self.client = OpenAI(api_key=key)
 
-        ## 
+        ## Call and wait for cooridnates service
         rospy.wait_for_service('coordinates')
         self.coordinates = rospy.ServiceProxy('coordinates', Coordinates)
         
@@ -92,6 +93,7 @@ class TaskGenerationAndSpeechToText:
             model="gpt-3.5-turbo", #"gpt-4"
         )
 
+        self.task_publisher.publish(chat_completion.choices[0].message.content) #"[('cup',[0.67, 0.24, 1.05])]")#
         return chat_completion.choices[0].message.content
 
 
@@ -127,6 +129,9 @@ class TaskGenerationAndSpeechToText:
         self.interface.launch()
 
 if __name__ == "__main__":
+    ## Initialize the `relax_arm_control` node
+    rospy.init_node('voice_with_chat')
+
     ## Instantiate the `TaskGenerationAndSpeechToText` class
     combined_class = TaskGenerationAndSpeechToText()
 
