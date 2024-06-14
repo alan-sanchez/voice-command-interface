@@ -31,7 +31,7 @@ class TaskGenerationAndSpeechToText:
     '''
     def __init__(self, model = "gpt-4o"):
         '''
-         A constructor that initializes the tokenizer and model.
+        A constructor that initializes the tokenizer and model.
 
         Parameters:
         - self: The self reference.
@@ -44,7 +44,6 @@ class TaskGenerationAndSpeechToText:
         self.bridge = CvBridge()
         self.sub = rospy.Subscriber('/head_camera/rgb/image_raw', Image, self.callback, queue_size=1)
     
-        ## Open the file in read mode
         ## Specify the relative path from the home directory and construct the full path using the user's home directory
         self.relative_path = 'catkin_ws/src/voice_command_interface'
         # self.image_path = os.path.join(os.environ['HOME'], self.relative_path, 'images/vlm.jpeg')
@@ -58,7 +57,6 @@ class TaskGenerationAndSpeechToText:
 
     def callback(self,img_msg):
         self.image = img_msg
-        # print("made it here")
 
     def generate_response(self,max_length=1000):
         '''
@@ -91,7 +89,7 @@ class TaskGenerationAndSpeechToText:
                 "content": [
                     {
                     "type": "text",
-                    "text": "You are a robot that assists with bartending. What’s in this image? If there is a bottle, how much liquid is in left in it"
+                    "text": "You are a robot that assists with bartending. What’s in this image? If there is a bottle, how much liquid is in left in it? Can you provide the pixel bounding box for each item?"
                     },
                     {
                     "type": "image_url",
@@ -118,7 +116,8 @@ if __name__ == "__main__":
 
     ## Instantiate the `TaskGenerationAndSpeechToText` class
     combined_class = TaskGenerationAndSpeechToText()
-    # outer loop controlling create movement or play movement
+    
+    ## outer loop controlling create movement or play movement
     while True:
         print("\n\nEnter 1 for Fetch to describe what it sees. \nEnter 2 to quit\n")
         control_selection = input("Choose an option: ")
@@ -126,9 +125,10 @@ if __name__ == "__main__":
         ## sub loop controlling add a movement feature
         if control_selection == "1":
             combined_class.generate_response()
+        
         elif control_selection == "2":
             break
-                        
-        # else:
-        #     print("\nInvalid selection\n")
+        
+        else:
+            print("\nInvalid selection\n")
     
