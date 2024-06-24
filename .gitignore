@@ -1,10 +1,15 @@
 /src/fast_chat_llm.py
 /src/flan_t5_xl_llm.py
-/models/*
+/models/yolov8l-seg.pt
 /src/interface.py
 /chat_turbo_llm.py
-/src/image_capture*
+/src/image*
 /src/camera_image*
 /src/LLM*
 /src/chat_turbo_llm.py
 /src/image_embedding.py
+/src/sam_example.py
+/src/query_pairs.py
+/src/plane_estimator.py
+/src/clustering.py
+# /src/VLM*
