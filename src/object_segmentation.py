@@ -9,11 +9,15 @@ import rospy
 import message_filters
 import os
 import tf
+import time
 
 import numpy as np
 import matplotlib.pyplot as plt
+import pyransac3d as pyrsc
 import sensor_msgs.point_cloud2 as pc2
 
+from vision_to_text import VisionToText
+from scipy.spatial import KDTree
 from sensor_msgs.msg import PointCloud2, Image, PointCloud
 from geometry_msgs.msg import Point32
 from ultralytics_ros.msg import YoloResult
@@ -32,7 +36,7 @@ def signal_handler(signal, frame):
 ## Assign the signal handler to the SIGINT signal
 signal.signal(signal.SIGINT, signal_handler)
 
-class ObjectSegmentation():
+class ObjectSegmentation(VisionToText):
     '''
     Class for estimating poses using YOLO and Primesense camera.         
     '''
@@ -43,6 +47,8 @@ class ObjectSegmentation():
         Parameters:
         - self: The self reference.
         '''
+        super().__init__() # Call the inherited classes constructors
+        
         ## Specify the relative and images directory path
         self.relative_path = 'catkin_ws/src/voice_command_interface/'
         self.image_directory = os.path.join(os.environ['HOME'], self.relative_path, 'images/')
@@ -60,19 +66,19 @@ class ObjectSegmentation():
 
         ## Subscribe and synchronize YOLO results, PointCloud2, and depth image messages
         self.yolo_results_sub = message_filters.Subscriber("/yolo_result", YoloResult)
-        self.pcl2_sub         = message_filters.Subscriber("/octomap_point_cloud_centers", PointCloud2)
-        self.yolo_image_sub   = message_filters.Subscriber("/yolo_image", Image)#"/head_camera/depth_downsample/points", PointCloud2)
+        self.pcl2_sub         = message_filters.Subscriber("/head_camera/depth_downsample/points", PointCloud2)
+        self.yolo_image_sub   = message_filters.Subscriber("/yolo_image", Image)
         self.raw_image_sub    = message_filters.Subscriber("/head_camera/rgb/image_raw", Image)
         sync = message_filters.ApproximateTimeSynchronizer([self.yolo_results_sub,
                                                             self.pcl2_sub,
                                                             self.yolo_image_sub,
                                                             self.raw_image_sub],
                                                             queue_size=1,
-                                                            slop=1.5)
+                                                            slop=2)
         sync.registerCallback(self.callback_sync) 
 
         ## Initialize TransformListener class
-        self.listener = tf.TransformListener()
+        self.listener = tf.TransformListener(True, rospy.Duration(10.0))#tf.TransformListener()
 
         ## ROS bridge for converting between ROS Image messages and OpenCV images
         self.bridge =CvBridge()      
@@ -104,7 +110,7 @@ class ObjectSegmentation():
         self.img_msg  = img_msg
         self.counter += 1
         
-        if self.counter > 3:
+        if self.counter > 2:
             ## Pull the longest list of detected objects from the yolo_msgs list
             max_msg_len = -1
             for msg in self.list_yolo_msgs:
@@ -115,7 +121,6 @@ class ObjectSegmentation():
             if self.counter == 1:
                 print('made it here')
 
-
     def segment_image(self):
         '''
         Function that segments all the object in the image.
@@ -123,11 +128,12 @@ class ObjectSegmentation():
         Parameters:
         - self: The self reference.
         '''
+        ############### Yolo bounding box information extraction #################
         ##     
         bbox_list = []
         yolo_polygon_list = []
 
-        ## Loop through YOLO detections from self.yolo_msg to pull the YOLO bounding box format: [center_x, center_y, width, height] )
+        ## Loop through YOLO detections from self.yolo_msg to pull the YOLO bounding box format: [center_x, center_y, width, height]
         for detection in self.yolo_msg.detections.detections:
             bbox_x_center = int(detection.bbox.center.x)
             bbox_y_center = int(detection.bbox.center.y)
@@ -142,16 +148,22 @@ class ObjectSegmentation():
             bbox_list.append(bbox)
             yolo_polygon_list.append(Polygon(self.convert_to_poly_format(bbox)))
 
-
         ## Convert the image message to an OpenCV image format using the bridge 
         raw_image = self.bridge.imgmsg_to_cv2(self.img_msg, desired_encoding='bgr8')
         yolo_image = self.bridge.imgmsg_to_cv2(self.yolo_image, desired_encoding='bgr8')
 
+        ## Visual all cropped images of YOLO detected objects
+        # for k, bbox in enumerate(bbox_list):
+        #     cropped_image = raw_image[bbox[1]:bbox[3], bbox[0]:bbox[2]] #y_min, y_max, x_min, x_max
+        #     img_name = 'cropped_image_' + str(k) + '.jpeg'
+        #     temp_directory = os.path.join(os.environ['HOME'],self.relative_path, 'images',img_name)
+        #     cv2.imwrite(temp_directory, cropped_image)
 
+        ################ Run SAM segmentation ################
         ## generate masks for the raw image using the SAM's mask_generator object
         masks = self.mask_generator.generate(raw_image)
         ## Run a forloop to find the index of the largest area from SAM's generated masks. The largest area, in theory, 
-        ## should be the table
+        ## it should be the table
         max_area = -1  # Start with a value that's less than any possible area value
         for i, mask in enumerate(masks):
             if mask['area'] > max_area:
@@ -218,42 +230,82 @@ class ObjectSegmentation():
         for index in sorted(indices_to_pop, reverse=True):
             masks.pop(index)         
 
-        ## Initialize a new point cloud message type to store position data.
-        pcl_cloud = PointCloud()
-        pcl_cloud.header = self.pcl2_msg.header
-        
-        x_coordinates = []
-        y_coordinates = []
-        ## For loop to extract pointcloud2 data into a list of x,y,z, and store it in a pointcloud message (pcl_cloud)
-        for data in pc2.read_points(self.pcl2_msg, skip_nans=True):
-            pcl_cloud.points.append(Point32(data[0],data[1],data[2]))
-            if data[2] > .785:
-                x_coordinates.append(data[0])
-                y_coordinates.append(data[1])
-
-
-        ###
         self.counter = 0
         self.list_yolo_msgs[:] = [] 
 
-        ####### Visual Debugger #######
-        for k, ms in enumerate(masks):
-            sam_bbox = self.convert_bbox_from_sam(ms['bbox'])
-            cropped_image = raw_image[sam_bbox[1]:sam_bbox[3], sam_bbox[0]:sam_bbox[2]] #y_min, y_max, x_min, x_max
-            img_name = 'cropped_image_' + str(k) + '.jpeg'
-            temp_directory = os.path.join(os.environ['HOME'],self.relative_path, 'images',img_name)
-            cv2.imwrite(temp_directory, cropped_image)
+        ############################# Voice To Text #################################
+        start_time = rospy.Time.now()
 
-        ####
-        plt.figure(figsize=(20,20))
-        plt.imshow(yolo_image) 
-        plt.scatter(x_coord,y_coord, color='b', marker='x', s=100)
-        plt.axis('off')
-        plt.show()
+        text_responses = self.generate_response(img=raw_image, bboxes=bbox_list)
+        
+        for response in text_responses:
+            print(response)
 
-        plt.figure(figsize=(20,20))
-        plt.scatter(x_coordinates, y_coordinates)
-        plt.show()
+        computation = rospy.Time.now() - start_time
+        # time_conversion = 
+        print("Computation time: " + str(computation.to_sec()))     
+        ######################### PointCloud segmentation ###########################
+        ## Initialize a new point cloud message type to store position data.
+        # temp_cloud = PointCloud()
+        # temp_cloud.header = self.pcl2_msg.header
+        
+        # x_arr = []
+        # y_arr = []
+        # z_arr = []
+        # x_coordinates = []
+        # y_coordinates = []
+        # # kd_points = []
+        # ## For loop to extract pointcloud2 data into a list of x,y,z, and store it in a pointcloud message (pcl_cloud)
+        # for data in pc2.read_points(self.pcl2_msg, skip_nans=True):
+        #     temp_cloud.points.append(Point32(data[0],data[1],data[2]))
+
+        # transformed_cloud = self.transform_pointcloud(temp_cloud)
+
+        # for point in transformed_cloud.points:
+        #     if point.z > 0.2:
+        #         x_arr.append(point.x)
+        #         y_arr.append(point.y)
+        #         z_arr.append(point.z)
+
+        # arr = np.column_stack((x_arr,y_arr,z_arr))
+        # plane1 = pyrsc.Plane()
+        # best_eq, _ = plane1.fit(arr, 0.01)
+        # table_height = abs(best_eq[3]) +.03
+        # # print(best_eq)
+                
+        # for i, zeta in enumerate(z_arr):
+        #     if zeta > table_height:
+        #         x_coordinates.append(x_arr[i])
+        #         y_coordinates.append(y_arr[i])
+        
+        # points = np.concatenate((x_coordinates, y_coordinates))        
+        # centroid, label = kmeans2(points, 2, minit='points')
+        # counts = np.bincount(label)
+
+        # print(len(x_coordinates))
+        # kd_tree = KDTree(kd_points)
+        # pairs = kd_tree.query_pairs(r=0.1)
+        # print(len(pairs))
+        ###
+        
+        ###### Visual Debugger #######
+        # for k, ms in enumerate(masks):
+        #     sam_bbox = self.convert_bbox_from_sam(ms['bbox'])
+        #     cropped_image = raw_image[sam_bbox[1]:sam_bbox[3], sam_bbox[0]:sam_bbox[2]] #y_min, y_max, x_min, x_max
+        #     img_name = 'cropped_image_' + str(k) + '.jpeg'
+        #     temp_directory = os.path.join(os.environ['HOME'],self.relative_path, 'images',img_name)
+        #     cv2.imwrite(temp_directory, cropped_image)
+
+        # ###
+        # plt.figure(figsize=(20,20))
+        # plt.imshow(yolo_image) 
+        # plt.scatter(x_coord,y_coord, color='b', marker='x', s=100)
+        # plt.axis('off')
+        # plt.show()
+
+        # plt.figure(figsize=(20,20))
+        # plt.plot(x_coordinates, y_coordinates, "xk", markersize=14)        
+        # plt.show()
 
     def convert_to_poly_format(self,bbox):
         '''
@@ -310,12 +362,28 @@ class ObjectSegmentation():
         Return:
         - 
         '''
-        ## 
         x_min = int(bbox_x_center - (bbox_width/2))
         y_min = int(bbox_y_center - (bbox_height/2))
         x_max = int(bbox_x_center + (bbox_width/2))
         y_max = int(bbox_y_center + (bbox_height/2))
         return [x_min, y_min, x_max, y_max] 
+    
+    def transform_pointcloud(self,msg):
+        """
+        Function that stores the PointCloud2 message.
+        :param self: The self reference.
+        :param msg: The PointCloud message.
+
+        :returns new_cloud: The transformed PointCloud message.
+        """
+        while not rospy.is_shutdown():
+            try:
+                new_cloud = self.listener.transformPointCloud("base_link" ,msg)
+                return new_cloud
+                # if new_cloud:
+                #     break
+            except (tf.LookupException, tf.ConnectivityException,tf.ExtrapolationException):
+                pass
     
                 
 if __name__=="__main__":
@@ -340,31 +408,3 @@ if __name__=="__main__":
             break
 
 
-
-
-
-# table_bounded_masks = []
-        # for mask in (masks):
-        #     ## Convert the mask's bounding box to a polygon format to get the x & y coordinates 
-        #     ## of each vertex. Then check to see if the coordinates are in the table polygon
-        #     temp_polygon = self.convert_to_poly_format(mask['bbox'])
-        #     for x, y in temp_polygon:
-        #         ## Create a Point message type for the vertex coordinates
-        #         point = Point(x,y) 
-        #         if table_polygon.contains(point):
-        #             table_bounded_masks.append(mask) 
-        #             break
-
-        # print(len(table_bounded_masks))
-        # for j, bounded_mask in enumerate(table_bounded_masks):
-        #     x_center, y_center = self.compute_bbox_center(bounded_mask['bbox'])
-        #     point = Point(x_center,y_center)
-        #     x_coord.append(x_center)
-        #     y_coord.append(y_center)
-        #     ## Check to see if center is inside any of YOLO's polygons (polygon_list)
-        #     for poly in yolo_polygon_list:
-        #         if poly.contains(point):
-        #             ## If the center is in the polygon, the remove that mask 
-        #             table_bounded_masks.pop(j)
-        #             # break                     
-        # print(len(table_bounded_masks), len(x_coord))
