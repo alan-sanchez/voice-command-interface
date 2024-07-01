@@ -13,4 +13,6 @@
 /src/plane_estimator.py
 /src/clustering.py
 /src/obj_segmentation.py
+/src/coordinates.txt
+/srv/*
 /models/*
