@@ -31,7 +31,7 @@ class ItemSegmentation:
         '''
         
         '''
-        ## Log initialization notifier
+        ## 
         self.relative_path = 'catkin_ws/src/voice_command_interface/'
         model_path = os.path.join(os.environ['HOME'], self.relative_path, 'models/sam_vit_h_4b8939.pth')
         self.image_path = os.path.join(os.environ['HOME'], self.relative_path, 'images/VLM.jpeg')
@@ -45,9 +45,14 @@ class ItemSegmentation:
         
         ## 
         self.mask_generator = SamAutomaticMaskGenerator(model=sam,
-                                                        points_per_side=8,
-                                                        pred_iou_thresh=0.98,
-                                                        stability_score_thresh=0.98,
+                                                        points_per_side=12,
+                                                        # points_per_batch=32,
+                                                        pred_iou_thresh=0.94,
+                                                        # stability_score_thresh=0.98,
+                                                        # crop_nms_thresh=0.2,
+                                                        # crop_n_layers=0,
+                                                        # crop_n_points_downscale_factor=2,
+                                                        # min_mask_region_area=100,
                                                         )
 
         rospy.loginfo('{}: has initialized.'.format(self.__class__.__name__))
@@ -61,10 +66,13 @@ class ItemSegmentation:
         # cropped_image = image_rgb[45:250,170:610] #[y_min, y_max, x_min, x_max]
         
         masks = self.mask_generator.generate(image_rgb)
+        print(type(masks))
+
         max_area = -1  # Start with a value that's less than any possible area value
 
         ## 
         for i, mask in enumerate(masks):
+            # print(mask['area'])
             if mask['area'] > max_area:
                 max_area = mask['area']
                 index = i
@@ -73,13 +81,13 @@ class ItemSegmentation:
         table_polygon = Polygon(table_bbox)
         
         ##
+        iter = 0
         for j, mask in enumerate(masks):
             if j == index:
                 continue
             
             ##
             bbox = self.get_vertices(masks[j]['bbox'])
-
             ##
             for x, y in bbox:
                 point = Point(x,y)
@@ -88,11 +96,11 @@ class ItemSegmentation:
                     img_name = 'cropped_image_' + str(j) + '.jpeg'
                     temp_directory = os.path.join(os.environ['HOME'],self.relative_path, 'images',img_name)
                     cv2.imwrite(temp_directory, cropped_image)
-
-                    print("Item is on the table")
+                    iter+=1
+                    # print("Item is on the table")
                     break
-
-
+        
+        print(iter)
         plt.figure(figsize=(20,20))
         plt.imshow(image_rgb) #cropped_image)
         self.show_anns(masks)
