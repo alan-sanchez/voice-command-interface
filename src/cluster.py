@@ -1,12 +1,8 @@
 #!/usr/bin/env python3
 
-
 import numpy as np
-
 import cv2 as cv
-
 import matplotlib.pyplot as plt
-
 
 class Cluster:
     def __init__(self, pixel_size=0.01, dilation_size=None):
@@ -18,10 +14,13 @@ class Cluster:
         self.min_y = None
         self.max_x = None
         self.max_y = None
+        self.indices = None
+        self.stats = None
+
 
     def fit(self, data):
         # Normalize the data into integer buckets
-        self.new_data = np.array([(int(x / self.pixel_size), int(y / self.pixel_size)) for x, y in data])
+        self.new_data = np.array([(int(x / self.pixel_size), int(y / self.pixel_size)) for x, y, z in data])
         self.min_x, self.min_y = np.min(self.new_data[:, 0]), np.min(self.new_data[:, 1])
 
         self.new_data[:, 0] -= self.min_x
@@ -47,58 +46,60 @@ class Cluster:
         axs[1].imshow(image)
         axs[1].title.set_text(f'After dilation and erosion ({self.dilation_size})')
 
-        n_labels, self.labels, stats, centroids  = cv.connectedComponentsWithStats(image, 8, cv.CV_8U)
+        n_labels, self.labels, self.stats, centroids  = cv.connectedComponentsWithStats(image, 8, cv.CV_8U)
         # print(f'{n_labels} total regions')
-       
-        # print(stats)
-
+    
         #Remove components that are too big (tabletop) or too small (noise)
-        print(f'{sum(np.logical_and(stats[:, 4] > 10, stats[:, 4] < 1000))} actual objects')
+        largest_area_index = np.argmax(self.stats[:, 4])
+        mask = np.logical_or(self.stats[:, 4] <= 30, self.stats[:, 4] == self.stats[largest_area_index, 4])
+
+        # Get the indices of the components that are too big or too small
+        self.indices = np.where(mask)[0]
+        # print(self.indices)
+        # print(self.stats)
 
         axs[2].imshow(self.labels)
         axs[2].title.set_text('Regions')
-        plt.show()
+        # plt.show()
 
-    def check_point(self, x, y):
+        # Initialize the regions dictionary
+        self.regions = {i: [] for i in range(1, n_labels) if i not in self.indices}
+
+        for X, Y, Z in data:
+            label = self.check_point(X, Y, Z)
+            if label:
+                self.regions[label].append([X, Y, Z])
+
+        return self.regions
+
+
+    def check_point(self, x, y, z):
         # Normalize the point
         int_x = int(x / self.pixel_size)
         int_y = int(y / self.pixel_size)
-        
+
         # min_x, min_y = np.min(self.new_data[:, 0]), np.min(self.new_data[:, 1])
         int_x -= self.min_x
         int_y -= self.min_y
-        print(int_x,int_y)
-        # Check if the point is within the image bounds
         if 0 <= int_x < self.labels.shape[0] and 0 <= int_y < self.labels.shape[1]:
             label = self.labels[int_x, int_y]
-            if label > 0:
-                return True, label
-            else:
-                return False, None
-        else:
-            return False, None
+            if label not in self.indices:
+                return label
 
 
-def load_data():
-    data = []
-    with open('coordinates.txt', 'r') as f:
-        for line in f:
-            x, y = line.split()
-            data.append((float(x), float(y)))
+# def load_data():
+#     data = []
+#     with open('coordinates.txt', 'r') as f:
+#         for line in f:
+#             x, y = line.split()
+#             data.append((float(x), float(y)))
     
-    return np.array(data)
+#     return np.array(data)
 
 
 if __name__ == '__main__':
-    data = load_data()
-
+    # data = load_data()
     cluster = Cluster(pixel_size=0.005, dilation_size=8)
-    cluster.fit(data)
+  
 
-    # Example usage of check_point method
-    x, y = .55, .19  # Example coordinates
-    is_within_label, label = cluster.check_point(x, y)
-    if is_within_label:
-        print(f'Point ({x}, {y}) is within label {label}')
-    else:
-        print(f'Point ({x}, {y}) is not within any label')
+
