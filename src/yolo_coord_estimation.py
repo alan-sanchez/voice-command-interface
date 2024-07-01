@@ -45,7 +45,7 @@ class CoordinateEstimation():
         self.service = rospy.Service('coordinates', Coordinates, self.callback_srv)
 
         ## Initialize TransformListener class
-        self.listener = tf.TransformListener()
+        self.listener = tf.TransformListener(True, rospy.Duration(10.0))
 
         ## Initialize empty list
         self.list_of_dictionaries = []
@@ -160,7 +160,7 @@ class CoordinateEstimation():
             # for key, value in dict_obj_and_bbox.values():
             #     # print(key, value) 
     
-            #     cropped_image = cv_raw_image[value[2]:value[3], value[0]:value[1]]
+            #     cropped_image = cv_raw_image[value[2]:value[3], value[0]:value[1]] ##y_min, y_max, x_min, x_max
             #     # print(corners.keys(),corners.value())
             
             # file_name = 'camera_image.jpeg'
