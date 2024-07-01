@@ -46,7 +46,7 @@ class VisionToText:
         # self.sub = rospy.Subscriber('/head_camera/rgb/image_raw', Image, self.callback, queue_size=1)
     
         ## Specify the relative path from the home directory and construct the full path using the user's home directory
-        self.relative_path = 'catkin_ws/src/voice_command_interface/images'
+        self.relative_path = 'catkin_ws/src/voice_command_interface/images/'
         # self.image_path = os.path.join(os.environ['HOME'], self.relative_path)
 
         # ## Open the file in read mode
@@ -73,7 +73,7 @@ class VisionToText:
         for k, bbox in enumerate(bboxes):
             cropped_image = img[bbox[1]:bbox[3], bbox[0]:bbox[2]] #y_min, y_max, x_min, x_max
             img_name = 'temp.jpeg'
-            temp_directory = os.path.join(os.environ['HOME'],self.relative_path,img_name)
+            temp_directory = os.path.join(os.environ['HOME'], self.relative_path, img_name)
             cv2.imwrite(temp_directory, cropped_image)
 
         ## Save image
