@@ -12,20 +12,15 @@ from sensor_msgs.msg import PointCloud
 
 class BBox():
     '''
-    Class for estimating poses using YOLO and Primesense camera.         
+    Class to create bounding boxes for detected objects.  
     '''
     def __init__(self):
         '''
-        Constructor method for initializing the PoseEstimation class.
+        Constructor method for initializing the BBox class.
 
         Parameters:
         - self: The self reference.
-        '''
-        ##
-        rospy.init_node('bounding_boxes',anonymous=True)
-
-        
-
+        '''   
         ## Initialize TransformListener class
         self.listener = tf.TransformListener()
     
@@ -35,70 +30,86 @@ class BBox():
         self.CX_DEPTH = 323.6686505142122
         self.CY_DEPTH = 223.8369337605044
 
+        ## Bounding box margin
+        self.pixel_margin = 20 #number of pixels
+
     def compute_bbox(self, region_dict):
         '''
-        Compute 3D pose based on bounding box center and depth image.
-
+        Function that computes bounding box from the camera's physical parameters.
+        reference link: https://stackoverflow.com/questions/31265245/
         Parameters:
         - self: The self reference.
-        - bbox_x_center (int): The x center location of the bounding box.
-        - bbox_y_center (int): The y center location of the bounding box.
-        - cv_image (image): OpenCV image of the head camera data.
-        - header (header): the header information of the head camera. 
-
+        - region_dict (dictionary): Dictionary regions in an image.
+        
         Return:
-        - transformed_point (PointStamped): The coordinate estimation of the detected object.
+        - bboxes (list): A list containing the bounding boxes of the detected objects.
         '''        
-        print(region_dict.keys())
+        ## Create a list to store the bounding box values for each detected object
+        bboxes = []
 
+        ## Run for loop 
         for key in region_dict:
-            # Initialize a PointCloud message
+            ## Initialize a PointCloud message
             point_cloud_msg = PointCloud()
             point_cloud_msg.header.stamp = rospy.Time.now()
             point_cloud_msg.header.frame_id = "base_link"  # Set the appropriate frame
 
+            ## Iterate through each (x,y,z) tuple in the list for the current key
             for x, y, z in region_dict[key]:
+                ## Create a Point32 message for each (x,y,z) coordinate
                 point = Point32()
                 point.x = x
                 point.y = y
                 point.z = z 
 
-                ##
+                ## Append the point to the PointCloud message
                 point_cloud_msg.points.append(point)
             
+            ## Transform the point cloud to the target frame
             transformed_cloud = self.transform_pointcloud(point_cloud_msg, "head_camera_rgb_optical_frame")   
+            
+            ## Initialize lists to store the transformed x, y coordinates values
             x_img = []
             y_img = []
-            depth = []
-            for points in transformed_cloud.points:
-                depth
 
+            ## Iterate through each point in the transformed point cloud
+            for point in transformed_cloud.points:
+                ## Calculate the depth, x, and y coordinate in the image plane
+                depth = point.z * 1000 
+                u = int((1000 * point.x * self.FX_DEPTH / depth) + self.CX_DEPTH)
+                v = int((1000* point.y * self.FY_DEPTH / depth) + self.CY_DEPTH)
+                x_img.append(u)                
+                y_img.append(v)
+            
+            ## Calculate the minimum and maximum x and y coordinates with pixel margin
+            x_min = min(x_img) - self.pixel_margin
+            x_max = max(x_img) + self.pixel_margin
+            y_min = min(y_img) - self.pixel_margin
+            y_max = max(y_img) + self.pixel_margin
 
-        # for i in range(10):
-            # self.pub.publish(temp_cloud)         
+            ## Constrain x_min and y_min to be at least 0
+            x_min = max(0, x_min)
+            y_min = max(0, y_min)
 
+            ## Constrain x_max to be at most 640 and y_max to be at most 480
+            x_max = min(640, x_max)
+            y_max = min(480, y_max)
 
-        # ## Extract depth value from the depth image at the center of the bounding box
-        # z = float(cv_image[bbox_y_center][bbox_x_center])/1000.0 # Depth values are typically in millimeters, convert to meters
-        
-        # ## Calculate x and y coordinates using depth information and camera intrinsics
-        # x = float((bbox_x_center - self.CX_DEPTH) * z / self.FX_DEPTH)
-        # y = float((bbox_y_center - self.CY_DEPTH - (bbox_height/2)) * z / self.FY_DEPTH) + self.height_cushion
+            ## Append the calculated bounding box to the bboxes list 
+            bboxes.append([x_min, y_min, x_max, y_max])
 
-        # ## Create a PointStamped object to store the computed coordinates
-        # point = PointStamped()
-        # point.header=header
-        # point.point.x = x 
-        # point.point.y = y 
-        # point.point.z = z 
+        return bboxes    
+
 
     def transform_pointcloud(self,pcl_msg, target_frame):
         """
-        Function that ...
-        :param self: The self reference.
-        :param msg: The PointCloud message.
+        Function that transforms the PointCloud to the desired target_frame.
+        Parameters:
+        - self: The self reference.
+        - pcl_msg(PointCloud): The point cloud of the detected objects.
 
-        :returns new_cloud: The transformed PointCloud message.
+        Returns:
+        - new_cloud(PointCloud): The transformed PointCloud message.
         """
         while not rospy.is_shutdown():
             try:
