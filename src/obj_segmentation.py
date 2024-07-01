@@ -41,14 +41,14 @@ class ObjectSegmentation(Cluster, BBox):
         Parameters:
         - self: The self reference.
         '''
-        super().__init__(pixel_size=0.005, dilation_size=6) # Call the inherited classes constructors
-        
+        Cluster.__init__(self,pixel_size=0.005, dilation_size=6) # Call the inherited classes constructors
+        BBox.__init__(self)
         ## Specify the relative and images directory path
-        self.relative_path = 'catkin_ws/src/voice_command_interface/'
-        self.image_directory = os.path.join(os.environ['HOME'], self.relative_path, 'images/')
+        self.relative_path = 'catkin_ws/src/voice_command_interface/images/'
+        self.image_directory = os.path.join(os.environ['HOME'], self.relative_path)
 
         ##
-        self.pub = rospy.Publisher('/test', PointCloud, queue_size=1)
+        # self.pub = rospy.Publisher('/test', PointCloud, queue_size=1)
 
         ## Subscribe and synchronize YOLO results, PointCloud2, and depth image messages
         self.pcl2_sub         = message_filters.Subscriber("/head_camera/depth_downsample/points", PointCloud2)
@@ -96,6 +96,9 @@ class ObjectSegmentation(Cluster, BBox):
         # Initialize a new point cloud message type to store position data.
         temp_cloud = PointCloud()
         temp_cloud.header = self.pcl2_msg.header
+
+        ## Convert the image message to an OpenCV image format using the bridge 
+        raw_image = self.bridge.imgmsg_to_cv2(self.img_msg, desired_encoding='bgr8')
         
         x = []
         y = []
@@ -129,10 +132,12 @@ class ObjectSegmentation(Cluster, BBox):
         
         data_arr = np.array(data)
         regions_dict = self.fit(data_arr)
-        test = self.compute_bbox(regions_dict)
-        # print(regions_dict)
-        # points = np.concatenate((x_coordinates, y_coordinates))
-                    
+        bboxes = self.compute_bbox(regions_dict)
+        for k, bbox in enumerate(bboxes):
+            cropped_image = raw_image[bbox[1]:bbox[3], bbox[0]:bbox[2]] #y_min, y_max, x_min, x_max
+            img_name = 'cropped_image_' + str(k) + '.jpeg'
+            temp_directory = os.path.join(os.environ['HOME'], self.relative_path, img_name)
+            cv2.imwrite(temp_directory, cropped_image)
         
         # plt.figure(figsize=(20,20))
         # plt.plot(x_coordinates, y_coordinates, "xk", markersize=14)        
@@ -152,19 +157,10 @@ class ObjectSegmentation(Cluster, BBox):
         # print("Computation time: " + str(computation.to_sec()))     
         
 
-        
-        
-        ###### Visual Debugger #######
-        # for k, ms in enumerate(masks):
-        #     sam_bbox = self.convert_bbox_from_sam(ms['bbox'])
-        #     cropped_image = raw_image[sam_bbox[1]:sam_bbox[3], sam_bbox[0]:sam_bbox[2]] #y_min, y_max, x_min, x_max
-        #     img_name = 'cropped_image_' + str(k) + '.jpeg'
-        #     temp_directory = os.path.join(os.environ['HOME'],self.relative_path, 'images',img_name)
-        #     cv2.imwrite(temp_directory, cropped_image)
 
         # ###
         # plt.figure(figsize=(20,20))
-        # plt.imshow(yolo_image) 
+        # plt.imshow(raw_image) 
         # plt.scatter(x_coord,y_coord, color='b', marker='x', s=100)
         # plt.axis('off')
         # plt.show()
@@ -202,7 +198,6 @@ if __name__=="__main__":
     while True:
         print("\n\nEnter 1 for Fetch to segment what it sees. \nEnter 2 to quit\n")
         control_selection = input("Choose an option: ")
-
 
         ## sub loop controlling add a movement feature
         if control_selection == "1":
