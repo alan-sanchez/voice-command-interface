@@ -15,7 +15,7 @@ import pyransac3d as pyrsc
 import sensor_msgs.point_cloud2 as pc2
 
 from cluster import Cluster
-from bounding_boxes import BBox
+from vision_to_text import VisionToText
 from sensor_msgs.msg import PointCloud2, Image, PointCloud
 from geometry_msgs.msg import Point32
 from cv_bridge import CvBridge
@@ -31,7 +31,7 @@ def signal_handler(signal, frame):
 ## Assign the signal handler to the SIGINT signal
 signal.signal(signal.SIGINT, signal_handler)
 
-class ObjectSegmentation(Cluster, BBox):
+class ObjectSegmentation(Cluster, VisionToText):
     '''
     '''
     def __init__(self):
@@ -41,14 +41,18 @@ class ObjectSegmentation(Cluster, BBox):
         Parameters:
         - self: The self reference.
         '''
-        Cluster.__init__(self,pixel_size=0.005, dilation_size=6) # Call the inherited classes constructors
-        BBox.__init__(self)
-        ## Specify the relative and images directory path
-        self.relative_path = 'catkin_ws/src/voice_command_interface/images/'
-        self.image_directory = os.path.join(os.environ['HOME'], self.relative_path)
+        # Call the inherited classes constructors
+        Cluster.__init__(self,pixel_size=0.005, dilation_size=6)
+        VisionToText.__init__(self) 
 
-        ##
-        # self.pub = rospy.Publisher('/test', PointCloud, queue_size=1)
+        ## Specify the relative and images directory path
+        self.relative_path = 'catkin_ws/src/voice_command_interface/'
+        self.image_directory = os.path.join(os.environ['HOME'], 'images/', self.relative_path)
+        label_prompt_dir = os.path.join(os.environ['HOME'], self.relative_path, 'prompts/', 'label_prompt.txt')
+
+        with open(label_prompt_dir, 'r') as file:
+            self.label_prompt = file.read()
+        
 
         ## Subscribe and synchronize YOLO results, PointCloud2, and depth image messages
         self.pcl2_sub         = message_filters.Subscriber("/head_camera/depth_downsample/points", PointCloud2)
@@ -65,14 +69,22 @@ class ObjectSegmentation(Cluster, BBox):
         ## ROS bridge for converting between ROS Image messages and OpenCV images
         self.bridge =CvBridge()      
 
+        ## Primsense Camera Parameters
+        self.FX_DEPTH = 529.8943482259415
+        self.FY_DEPTH = 530.4502363904782
+        self.CX_DEPTH = 323.6686505142122
+        self.CY_DEPTH = 223.8369337605044
+        
         ## Initialize variables and constants
         self.list_yolo_msgs = []
         self.pcl2_msg = None
         self.counter  = 0
+        self.pixel_margin = 20 #number of pixels
         self.y_buffer = 15 # number of pixels to buffer in y direction
-        
+
         ## Log initialization notifier
         rospy.loginfo('{}: is ready.'.format(self.__class__.__name__))
+
 
     def callback_sync(self, pcl2_msg, img_msg):
         '''
@@ -85,6 +97,7 @@ class ObjectSegmentation(Cluster, BBox):
         '''
         self.pcl2_msg = pcl2_msg
         self.img_msg  = img_msg
+
 
     def segment_image(self):
         '''
@@ -103,8 +116,8 @@ class ObjectSegmentation(Cluster, BBox):
         x = []
         y = []
         z = []
-        # x_coordinates = []
-        # y_coordinates = []
+        x_coordinates = []
+        y_coordinates = []
 
         ## For loop to extract pointcloud2 data into a list of x,y,z, and store it in a pointcloud message (pcl_cloud)
         for data in pc2.read_points(self.pcl2_msg, skip_nans=True):
@@ -120,23 +133,24 @@ class ObjectSegmentation(Cluster, BBox):
         arr = np.column_stack((x,y,z))
         plane1 = pyrsc.Plane()
         best_eq, _ = plane1.fit(arr, 0.01)
-        table_height = abs(best_eq[3]) +.03
+        table_height = abs(best_eq[3]) +.022
         # print(best_eq)
 
         data = []        
         for i, zeta in enumerate(z):
             if zeta > table_height:
-                # x_coordinates.append(x[i])
-                # y_coordinates.append(y[i])
+                x_coordinates.append(x[i])
+                y_coordinates.append(y[i])
                 data.append((float(x[i]), float(y[i]), float(z[i])))
         
         data_arr = np.array(data)
         regions_dict = self.fit(data_arr)
-        bboxes = self.compute_bbox(regions_dict)
-        for k, bbox in enumerate(bboxes):
+        bbox_list = self.compute_bbox(regions_dict)
+
+        for k, bbox in enumerate(bbox_list):
             cropped_image = raw_image[bbox[1]:bbox[3], bbox[0]:bbox[2]] #y_min, y_max, x_min, x_max
             img_name = 'cropped_image_' + str(k) + '.jpeg'
-            temp_directory = os.path.join(os.environ['HOME'], self.relative_path, img_name)
+            temp_directory = os.path.join(os.environ['HOME'], self.relative_path, 'images', img_name)
             cv2.imwrite(temp_directory, cropped_image)
         
         # plt.figure(figsize=(20,20))
@@ -147,9 +161,9 @@ class ObjectSegmentation(Cluster, BBox):
         ############################# Vision To Text #################################
         # start_time = rospy.Time.now()
 
-        # text_responses = self.generate_response(img=raw_image, bboxes=bbox_list)
+        # labels = self.generate_response(img=raw_image, prompt=self.label_prompt, bboxes=bbox_list)
         
-        # for response in text_responses:
+        # for response in labels:
         #     print(response)
 
         # computation = rospy.Time.now() - start_time
@@ -168,7 +182,74 @@ class ObjectSegmentation(Cluster, BBox):
         # plt.figure(figsize=(20,20))
         # plt.plot(x_coordinates, y_coordinates, "xk", markersize=14)        
         # plt.show()
+    
 
+    def compute_bbox(self, region_dict):
+        '''
+        Function that computes bounding box from the camera's physical parameters.
+        reference link: https://stackoverflow.com/questions/31265245/
+        Parameters:
+        - self: The self reference.
+        - region_dict (dictionary): Dictionary regions in an image.
+        
+        Return:
+        - bboxes (list): A list containing the bounding boxes of the detected objects.
+        '''        
+        ## Create a list to store the bounding box values for each detected object
+        bboxes = []
+
+        ## Run for loop 
+        for key in region_dict:
+            ## Initialize a PointCloud message
+            point_cloud_msg = PointCloud()
+            point_cloud_msg.header.stamp = rospy.Time.now()
+            point_cloud_msg.header.frame_id = "base_link"  # Set the appropriate frame
+
+            ## Iterate through each (x,y,z) tuple in the list for the current key
+            for x, y, z in region_dict[key]["points"]:
+                ## Create a Point32 message for each (x,y,z) coordinate
+                point = Point32()
+                point.x = x
+                point.y = y
+                point.z = z 
+
+                ## Append the point to the PointCloud message
+                point_cloud_msg.points.append(point)
+            
+            ## Transform the point cloud to the target frame
+            transformed_cloud = self.transform_pointcloud(point_cloud_msg, "head_camera_rgb_optical_frame")   
+            
+            ## Initialize lists to store the transformed x, y coordinates values
+            x_img = []
+            y_img = []
+
+            ## Iterate through each point in the transformed point cloud
+            for point in transformed_cloud.points:
+                ## Calculate the depth, x, and y coordinate in the image plane
+                depth = point.z * 1000 
+                u = int((1000 * point.x * self.FX_DEPTH / depth) + self.CX_DEPTH)
+                v = int((1000* point.y * self.FY_DEPTH / depth) + self.CY_DEPTH)
+                x_img.append(u)                
+                y_img.append(v)
+            
+            ## Calculate the minimum and maximum x and y coordinates with pixel margin
+            x_min = min(x_img) - self.pixel_margin
+            x_max = max(x_img) + self.pixel_margin
+            y_min = min(y_img) - self.pixel_margin
+            y_max = max(y_img) + self.pixel_margin
+
+            ## Constrain x_min and y_min to be at least 0
+            x_min = max(0, x_min)
+            y_min = max(0, y_min)
+
+            ## Constrain x_max to be at most 640 and y_max to be at most 480
+            x_max = min(640, x_max)
+            y_max = min(480, y_max)
+
+            ## Append the calculated bounding box to the bboxes list 
+            bboxes.append([x_min, y_min, x_max, y_max])
+
+        return bboxes    
     
     
     def transform_pointcloud(self,pcl_msg, target_frame):
@@ -193,7 +274,14 @@ if __name__=="__main__":
 
     ## Instantiate the `CoordinateEstimation` class
     obj = ObjectSegmentation()
+
+    '''
+    - you want to first segment the objects
+    - then you want to continiously check on the centriods of the objects. 
+    - 
     
+    '''
+
     ## outer loop controlling create movement or play movement
     while True:
         print("\n\nEnter 1 for Fetch to segment what it sees. \nEnter 2 to quit\n")
