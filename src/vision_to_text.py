@@ -40,84 +40,79 @@ class VisionToText:
         ## Pull and set key for openai
         self.model_id = model
         self.key = os.environ.get("openai_key")
-        # self.client = OpenAI()
 
+        ## 
         self.bridge = CvBridge()
-        # self.sub = rospy.Subscriber('/head_camera/rgb/image_raw', Image, self.callback, queue_size=1)
     
         ## Specify the relative path from the home directory and construct the full path using the user's home directory
-        self.relative_path = 'catkin_ws/src/voice_command_interface/images/'
-        # self.image_path = os.path.join(os.environ['HOME'], self.relative_path)
+        self.relative_path = 'catkin_ws/src/voice_command_interface/'
 
-        # ## Open the file in read mode
-        # prompt = os.path.join(os.environ['HOME'], self.relative_path, 'prompts/action_list.txt')
+        ## 
+        default_image_dir  = os.path.join(os.environ['HOME'], self.relative_path, 'images/vlm.jpeg')
         
-        # with open(prompt, 'r') as file:
-        #     ## Read the contents of the file into a string
-        #     self.initial_prompt = file.read()
+        ## Convert the image message to an OpenCV image format using the bridge
+        image_bgr = cv2.imread(default_image_dir)
+        self.default_image = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB) 
+        # self.ex_image = self.bridge.imgmsg_to_cv2(image_rgb, desired_encoding='bgr8')
 
-    # def callback(self,img_msg):
-    #     self.image = img_msg
-
-    def generate_response(self,img=None, bboxes=None, max_length=1000):
+    def generate_response(self,img = 'default_img', prompt="what do you see?", bbox=[[0, 0, 640, 480]], max_length=1000):
         '''
+        A function that ...
         Reference: https://platform.openai.com/docs/guides/vision
+
+        Parameters:
+        - img (Image)
+        - bboxes (list)
+        - prompt (str)
+
         '''
-        # # Convert image
-        # try:
-        #     image = self.bridge.imgmsg_to_cv2(self.image, 'bgr8')
-        # except CvBridgeError as e:
-        #     rospy.logwarn('CV Bridge error: {0}'.format(e))
-        # rospy.loginfo("Saving Image now")
-        text_list = [] 
-        for k, bbox in enumerate(bboxes):
-            cropped_image = img[bbox[1]:bbox[3], bbox[0]:bbox[2]] #y_min, y_max, x_min, x_max
-            img_name = 'temp.jpeg'
-            temp_directory = os.path.join(os.environ['HOME'], self.relative_path, img_name)
-            cv2.imwrite(temp_directory, cropped_image)
+        if isinstance(img, str): 
+            img = self.default_image
 
-        ## Save image
-        # completeName = os.path.join(os.environ['HOME'], self.relative_path, 'cropped_image_3.jpeg')
-        # cv2.imwrite(completeName, image)
 
-            with open(temp_directory, "rb") as image_file:
-                base64_image = base64.b64encode(image_file.read()).decode('utf-8')
-            
-                headers = {
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {self.key}"
-                }
+        # text_list = [] 
+        # for k, bbox in enumerate(bboxes):
+        cropped_image = img[bbox[1]:bbox[3], bbox[0]:bbox[2]] #y_min, y_max, x_min, x_max
+        img_name = 'temp.jpeg'
+        temp_directory = os.path.join(os.environ['HOME'], self.relative_path, 'images',img_name)
+        cv2.imwrite(temp_directory, cropped_image)
 
-                payload = {
-                    "model": "gpt-4o",
-                    "messages": [
+        with open(temp_directory, "rb") as image_file:
+            base64_image = base64.b64encode(image_file.read()).decode('utf-8')
+        
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.key}"
+            }
+
+            payload = {
+                "model": self.model_id,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
                         {
-                            "role": "user",
-                            "content": [
+                            "type": "text",
+                            "text": prompt
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": 
                             {
-                                "type": "text",
-                                "text": "You are a robot that assists with bartending. There are items on a table meant to make a cocktail. Can you identify what the item is based on the image provided?"
-                            },
-                            {
-                                "type": "image_url",
-                                "image_url": 
-                                {
-                                    "url": f"data:image/jpeg;base64,{base64_image}"
-                                }
-                            },
-                        ]
-                        }
-                    ],
-                    "max_tokens": max_length
-                }
+                                "url": f"data:image/jpeg;base64,{base64_image}"
+                            }
+                        },
+                    ]
+                    }
+                ],
+                "max_tokens": max_length
+            }
 
-
-                response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
-                data = response.json()
-                content = data["choices"][0]["message"]["content"]
-                text_list.append([str(k+1) + ') ' + content])
-
-        return text_list
+            response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
+            data = response.json()
+            content = data["choices"][0]["message"]["content"]
+            #    text_list.append(content)
+        return content # text_list
 
 
 if __name__ == "__main__":
@@ -134,7 +129,8 @@ if __name__ == "__main__":
 
         ## sub loop controlling add a movement feature
         if control_selection == "1":
-            combined_class.generate_response()
+            response_text = combined_class.generate_response()
+            print(response_text)
         
         elif control_selection == "2":
             break
