@@ -23,7 +23,8 @@ class AudioCommunication:
         - self: The self reference. 
         """
         ## Initialize subscriber
-        self.sub = rospy.Subscriber('/speech_recognition/final_result', String, self.callback, queue_size=10)
+        # self.sub = rospy.Subscriber('/speech_recognition/final_result', String, self.callback, queue_size=10)
+        self.pub = rospy.Publisher('/talk', String, queue_size=10)
         
         ## Specify the relative and images directory path
         self.relative_path = 'catkin_ws/src/voice_command_interface/'
@@ -43,7 +44,7 @@ class AudioCommunication:
         ## Log initialization notifier
         rospy.loginfo('{}: is ready.'.format(self.__class__.__name__))
 
-    def callback(self, msg):
+    def initial_interaction(self):
         """
         Callback function that gets called when a new message is received on the subscribed topic.
         Parameters:
@@ -51,19 +52,23 @@ class AudioCommunication:
         - msg (String): The string message coming in from initial greeting
         """
         ## Begin greeting
-        if msg.data == 'hi fetch':
-            ## Read and play the introductory audio file
-            data, fs = sf.read(self.intro_audio_dir, dtype='float32')
-            sd.play(data, fs)
-            status = sd.wait() # Wait until playback is finished
-                
-            ## Begin voice recording
-            ## Record audio from the microphone for the specified duration
-            myrecording = sd.rec(int(self.seconds * self.fs), samplerate=self.fs, channels=2)
-            sd.wait()  # Wait until recording is finished
+        data, fs = sf.read(self.intro_audio_dir, dtype='float32')
+        sd.play(data, fs)
+        status = sd.wait() # Wait until playback is finished
+        self.pub.publish("start")
+            
+        ## Begin voice recording
+        ## Record audio from the microphone for the specified duration
+        myrecording = sd.rec(int(self.seconds * self.fs), samplerate=self.fs, channels=2)
+        sd.wait()  # Wait until recording is finished
 
-            ## Save the recorded audio as a WAV file
-            write(self.voice_recording_dir, self.fs, myrecording)  # Save as WAV file 
+        ## Save the recorded audio as a WAV file
+        write(self.voice_recording_dir, self.fs, myrecording)  # Save as WAV file 
+    
+    # def suggestion(self):
+
+
+
 
 
 if __name__ == '__main__':
@@ -71,7 +76,11 @@ if __name__ == '__main__':
     rospy.init_node('audio_communication', argv=sys.argv)
 
     ## Create an instance of the AudioCommunication class
-    AudioCommunication()
+    obj = AudioCommunication()
+
+    input("Press Enter when ready.")
+
+    obj.initial_interaction()
 
     ## Keep the program running and listening for callbacks
     rospy.spin()
