@@ -21,14 +21,16 @@ class Cluster:
         self.dilation_size = dilation_size
         self.new_data = None
         self.labels = None
-        self.min_x = None
-        self.min_y = None
-        self.max_x = None
-        self.max_y = None
-        self.indices = None
         self.stats = None
+        self.region_dict = {}
+        self.min_x = 0
+        self.min_y = 0
+        self.max_x = 0
+        self.max_y = 0
+        self.indices = 0
+        
 
-    def fit(self, data):
+    def compute_regions(self, data):
         '''
         Function that clusters pixels from an image.
         Parameters:
@@ -73,23 +75,39 @@ class Cluster:
         self.indices = np.where(mask)[0]
         # print(self.indices)
         # print(self.stats)
+        # x_plot = []
+        # y_plot = []
+        # for x, y in centroids:
+        #     x_plot.append(x)
+        #     y_plot.append(y)
 
         # axs[2].imshow(self.labels)
+        # axs[2].plot(x_plot, y_plot)
         # axs[2].title.set_text('Regions')
         # plt.show()
 
-        ## Initialize the regions dictionary
-        self.regions = {i: [] for i in range(1, n_labels) if i not in self.indices}
 
+        # Initialize the regions dictionary
+        self.region_dict = {i: {"points": []} for i in range(1, n_labels) if i not in self.indices}
+        # self.regions = {i: [] for i in range(1, n_labels) if i not in self.indices}
         for X, Y, Z in data:
-            label = self.check_point(X, Y, Z)
-            if label:
-                self.regions[label].append([X, Y, Z])
+            region_id = self.check_point(X, Y)
+            if region_id:
+                self.region_dict[region_id]["points"].append([X, Y, Z])
 
-        return self.regions
+        for id in self.region_dict:
+            points_array = np.array(self.region_dict[id]["points"])
+            x_centroid, y_centroid, _ = np.mean(points_array, axis=0)
+            z_values = [point[2] for point in self.region_dict[id]["points"]]
+            max_z_value = max(z_values)
+        
+            self.region_dict[id]["centroid"] = [x_centroid, y_centroid, max_z_value]
+
+        
+        return self.region_dict
 
 
-    def check_point(self, x, y, z):
+    def check_point(self, x, y):
         ## Normalize the point
         int_x = int(x / self.pixel_size)
         int_y = int(y / self.pixel_size)
@@ -101,17 +119,7 @@ class Cluster:
             label = self.labels[int_x, int_y]
             if label not in self.indices:
                 return label
-
-
-# def load_data():
-#     data = []
-#     with open('coordinates.txt', 'r') as f:
-#         for line in f:
-#             x, y = line.split()
-#             data.append((float(x), float(y)))
-    
-#     return np.array(data)
-
+            
 
 if __name__ == '__main__':
     # data = load_data()
