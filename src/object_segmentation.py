@@ -193,7 +193,7 @@ class ObjectSegmentation(Cluster, VisionToText, BBox):
             # plt.figure(figsize=(20,20))
             # plt.plot(x_plot, y_plot, "xk", markersize=14)        
             # plt.show()
-
+            os.remove(temp_directory)
         return regions_dict 
     
 

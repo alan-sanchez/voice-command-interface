@@ -14,5 +14,7 @@
 /src/clustering.py
 /src/obj_segmentation.py
 /src/coordinates.txt
+/src/voice_with_chat.py
 /srv/*
 /models/*
+/src/yolo_coord_estimation.py
