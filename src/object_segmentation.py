@@ -2,7 +2,7 @@
 
 ## Import needed libraries
 import cv2
-# import signal
+import signal
 import rospy
 import message_filters
 import os
@@ -15,7 +15,6 @@ import pyransac3d as pyrsc
 import sensor_msgs.point_cloud2 as pc2
 
 from cluster import Cluster
-# from vision_to_text import VisionToText
 from bounding_boxes import BBox
 from gpt_features import VisionToText
 
@@ -24,16 +23,16 @@ from geometry_msgs.msg import Point32
 from cv_bridge import CvBridge
 from std_msgs.msg import String
 
-# ## Define a class attribute or a global variable as a flag
-# interrupted = False
+## Define a class attribute or a global variable as a flag
+interrupted = False
 
-# ## Function to handle signal interruption
-# def signal_handler(signal, frame):
-#     global interrupted
-#     interrupted = True
+## Function to handle signal interruption
+def signal_handler(signal, frame):
+    global interrupted
+    interrupted = True
 
-# ## Assign the signal handler to the SIGINT signal
-# signal.signal(signal.SIGINT, signal_handler)
+## Assign the signal handler to the SIGINT signal
+signal.signal(signal.SIGINT, signal_handler)
 
 class ObjectSegmentation():  #(Cluster, VisionToText, BBox):
     '''
@@ -43,11 +42,6 @@ class ObjectSegmentation():  #(Cluster, VisionToText, BBox):
         '''
         Constructor method for initializing the ObjectSegmentation class.
         '''
-        ## Call the inherited classes constructors
-        # Cluster.__init__(self,pixel_size=0.005, dilation_size=6)
-        # VisionToText.__init__(self) 
-        # BBox.__init__(self)
-
         self.bbox_obj = BBox()
         self.cluster_obj = Cluster()
         self.vtt_obj = VisionToText()
@@ -56,21 +50,16 @@ class ObjectSegmentation():  #(Cluster, VisionToText, BBox):
         ##
         self.sub = rospy.Subscriber('/talk', String, self.talk_callback, queue_size=10)
 
+        self.label_prompt_filename = 'drink_label_prompt'#UV_label_prompt.txt
+
         ## Specify the relative and images directory path
         self.relative_path = 'catkin_ws/src/voice_command_interface/'
-        self.image_directory = os.path.join(os.environ['HOME'], 'images/', self.relative_path)
-        # label_prompt_dir = os.path.join(os.environ['HOME'], self.relative_path, 'prompts/', 'UV_label_prompt.txt')
-        label_prompt_dir = os.path.join(os.environ['HOME'], self.relative_path, 'prompts/', 'bar_label_prompt.txt')
         updated_map_dir = os.path.join(os.environ['HOME'], self.relative_path, 'prompts/', 'updated_map.txt')
         self.dictionary_dir = os.path.join(os.environ['HOME'], self.relative_path, 'prompts/', 'dictionary_info.txt')
 
-        ##
-        with open(label_prompt_dir, 'r') as file:
-            self.label_prompt = file.read()
-
         ## 
         with open(updated_map_dir, 'r') as file:
-            self.updated_prompt = file.read()
+            self.updated_map_prompt = file.read()
         
         ## Subscribe and synchronize YOLO results, PointCloud2, and depth image messages
         self.pcl2_sub         = message_filters.Subscriber("/head_camera/depth_downsample/points", PointCloud2)
@@ -105,8 +94,8 @@ class ObjectSegmentation():  #(Cluster, VisionToText, BBox):
             ## 
             dict = self.segment_image(visual_debugger=True)
             self.label_images(dict)
-            with open(self.dictionary_dir, 'w') as json_file:
-                json.dump(self.object_location_dict, json_file, indent=4)
+            # with open(self.dictionary_dir, 'w') as json_file:
+            #     json.dump(self.object_location_dict, json_file, indent=4)
 
             ## 
             self.timer = rospy.Timer(rospy.Duration(5), self.timer_callback)            
@@ -214,7 +203,7 @@ class ObjectSegmentation():  #(Cluster, VisionToText, BBox):
         raw_image = self.bridge.imgmsg_to_cv2(self.img_msg, desired_encoding='bgr8')
 
         for id in regions_dict:
-            label = self.vtt_obj.viz_to_text(img=raw_image, prompt=self.label_prompt, bbox=regions_dict[id]["bbox"])
+            label = self.vtt_obj.viz_to_text(img=raw_image, bbox=regions_dict[id]["bbox"], prompt_filename = self.label_prompt_filename)
             self.object_location_dict[label] = regions_dict[id]["centroid"]
         
         print(self.object_location_dict.keys())
@@ -222,7 +211,7 @@ class ObjectSegmentation():  #(Cluster, VisionToText, BBox):
 
     def location_updater(self):
         '''
-
+        Updates the locations of objects based on the segmented image data and the current object locations.
         '''
         ## 
         current_data_dict = self.segment_image()
@@ -249,7 +238,7 @@ class ObjectSegmentation():  #(Cluster, VisionToText, BBox):
         elif len(copy_obj_dict) > 1 and len(current_data_dict) > 1: # for id in current_data_dict:
             keys = copy_obj_dict.keys()
             labels = list(keys)
-            updated_prompt = self.updated_prompt + str(labels)
+            updated_prompt = self.updated_map_prompt + str(labels)
 
             ## Convert the image message to an OpenCV image format using the bridge 
             raw_image = self.bridge.imgmsg_to_cv2(self.img_msg, desired_encoding='bgr8')
@@ -275,18 +264,18 @@ if __name__=="__main__":
     ## Instantiate the `CoordinateEstimation` class
     obj = ObjectSegmentation()
 
-    # rospy.spin()
+    rospy.spin()
 
-    print("\n\nEnter 1 for Fetch to segment what it sees. \nElse enter anything or ctrl+c to exit the node\n")
-    control_selection = input("Choose an option: ")
+    # print("\n\nEnter 1 for Fetch to segment what it sees. \nElse enter anything or ctrl+c to exit the node\n")
+    # control_selection = input("Choose an option: ")
 
-    ## sub loop controlling add a movement feature
-    if control_selection == "1":
-        dict = obj.segment_image(visual_debugger=True)
-        obj.label_images(dict)
+    # ## sub loop controlling add a movement feature
+    # if control_selection == "1":
+    #     dict = obj.segment_image(visual_debugger=True)
+    #     obj.label_images(dict)
 
-        # #
-        while True:
-            rospy.sleep(5)
-            obj.location_updater()
+    #     # # #
+    #     while True:
+    #         rospy.sleep(5)
+    #         obj.location_updater()
         
