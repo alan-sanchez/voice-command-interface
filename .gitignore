@@ -18,3 +18,6 @@
 /srv/*
 /models/*
 /src/yolo_coord_estimation.py
+/src/speech_to_text.py
+/src/text_to_speech.py
+/src/vision_to_text.py
