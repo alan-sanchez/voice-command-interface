@@ -133,7 +133,7 @@ class VisionToText(OpenAIBase):
         image_bgr = cv2.imread(default_image_dir)
         self.default_image = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
 
-    def viz_to_text(self, img='default_img', prompt="what do you see?", bbox=[0, 0, 640, 480], max_length=1000):
+    def viz_to_text(self, img='default', bbox=[0, 0, 640, 480], prompt_filename=None, max_length=1000):
         '''
         A function that performs vision-to-text conversion using OpenAI's API.
         Reference: https://platform.openai.com/docs/guides/vision
@@ -147,6 +147,15 @@ class VisionToText(OpenAIBase):
         ## Use the default image if 'img' is provided as a string
         if isinstance(img, str):
             img = self.default_image
+        
+        ## Use conditional statement to pull text from the prompt directory
+        if prompt_filename == None:
+            prompt="what do you see?"
+        else:
+            prompt_dir = os.path.join(os.environ['HOME'], self.relative_path, 'prompts/', prompt_filename)
+            with open(prompt_dir, 'r') as file:
+                prompt = file.read()
+        
 
         ## Crop the image using the provided bounding box coordinates
         cropped_image = img[bbox[1]:bbox[3], bbox[0]:bbox[2]]
@@ -200,6 +209,50 @@ class VisionToText(OpenAIBase):
         return content
     
 
+class TextToText(OpenAIBase):
+    """
+    A class that handles text to speech conversion and audio playback using OpenAI API.
+    """
+    def __init__(self):
+        '''
+        Constructor method for initialzing inherited class.
+        '''
+        super().__init__()
+        
+
+    def text_to_text(self, system_filename=None,user_prompt='Hello!'):
+        '''
+        Generates a response from the OpenAI API based on a system prompt and a user prompt.
+
+        Parameters:
+        - system_filename (str): The filename of the system prompt text file (without extension). Defaults to None.
+        - user_prompt (str): The prompt/question provided by the user. Defaults to 'Hello!'.
+
+        Returns:
+        - response_content (str): The generated response from the OpenAI API.
+        '''
+        ## Determine if the file path for the system prompt
+        if system_filename == None:
+            ## Use the default system prompt file if no filename is provided
+            file_dir = os.path.join(os.environ['HOME'], self.relative_path, 'prompts', "system_prompt.txt")
+        else:
+            file_dir = os.path.join(os.environ['HOME'], self.relative_path, 'prompts', system_filename + '.txt')
+
+        ## Read the system prompt from the specified file
+        with open(file_dir, 'r') as file:
+            system_prompt = file.read()
+                
+        ## Create the chat completion request using the OpenAI API
+        response = self.client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ]
+            )
+        
+        ## Extract and return the generated response content
+        return response.choices[0].message.content
 
 if __name__ == "__main__":
     rospy.init_node('gpt_features')
@@ -207,12 +260,15 @@ if __name__ == "__main__":
     stt = SpeechToText()
     tts = TextToSpeech()
     vtt = VisionToText()
+    ttt = TextToText()
+
 
     while True:
         print("\n\nEnter 1 for Speech to Text conversion.")
         print("Enter 2 for Text to Speech conversion and playback.")
         print("Enter 3 for Vision to Text conversion.")
-        print("Enter 4 to quit\n")
+        print("Enter 4 for Text to Text generation.")
+        print("Enter 5 to quit\n")
         control_selection = input("Choose an option: ")
 
         if control_selection == "1":
@@ -220,7 +276,7 @@ if __name__ == "__main__":
             print(f"Converted Text: {text}")
 
         elif control_selection == "2":
-            tts.convert_to_speech("Hello, Skinny Human?", "intro")
+            tts.convert_to_speech("Hello, Skinny Human.", "intro")
             tts.playback("intro")
 
         elif control_selection == "3":
@@ -228,6 +284,10 @@ if __name__ == "__main__":
             print(response_text)
 
         elif control_selection == "4":
+            response_text = ttt.text_to_text()
+            print(response_text)
+            
+        elif control_selection =="5":    
             break
 
         else:
