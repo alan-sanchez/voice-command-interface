@@ -43,7 +43,7 @@ class SpeechToText(OpenAIBase):
         '''
         super().__init__()
 
-    def convert_to_text(self, file_name="intro.wav"):
+    def convert_to_text(self, file_name="intro"):
         '''
         Converts text to speech and saves it to a file.
         Link:https://platform.openai.com/docs/guides/speech-to-text
@@ -56,7 +56,7 @@ class SpeechToText(OpenAIBase):
         transcription.txt (str): The transcribed audio.
         '''
         ## Define audio directory
-        audio_dir = os.path.join(os.environ['HOME'], self.relative_path, 'audio_files', file_name)
+        audio_dir = os.path.join(os.environ['HOME'], self.relative_path, 'audio_files', file_name + '.wav')
 
         ## Ready file
         with open(audio_dir, "rb") as audio_file:
@@ -152,7 +152,7 @@ class VisionToText(OpenAIBase):
         if prompt_filename == None:
             prompt="what do you see?"
         else:
-            prompt_dir = os.path.join(os.environ['HOME'], self.relative_path, 'prompts/', prompt_filename)
+            prompt_dir = os.path.join(os.environ['HOME'], self.relative_path, 'prompts/', prompt_filename + '.txt')
             with open(prompt_dir, 'r') as file:
                 prompt = file.read()
         
@@ -220,7 +220,7 @@ class TextToText(OpenAIBase):
         super().__init__()
         
 
-    def text_to_text(self, system_filename=None,user_prompt='Hello!'):
+    def text_to_text(self, system_filename=None, user_prompt='Hello!'):
         '''
         Generates a response from the OpenAI API based on a system prompt and a user prompt.
 
@@ -272,7 +272,7 @@ if __name__ == "__main__":
         control_selection = input("Choose an option: ")
 
         if control_selection == "1":
-            text = stt.convert_to_text("intro.wav")
+            text = stt.convert_to_text("intro")
             print(f"Converted Text: {text}")
 
         elif control_selection == "2":
