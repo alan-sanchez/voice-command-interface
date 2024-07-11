@@ -41,7 +41,7 @@ class VisionToText:
         self.model_id = model
         self.key = os.environ.get("openai_key")
 
-        ## 
+        ## Create a `CVBridge` object
         self.bridge = CvBridge()
     
         ## Specify the relative path from the home directory and construct the full path using the user's home directory
@@ -55,7 +55,7 @@ class VisionToText:
         self.default_image = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB) 
         # self.ex_image = self.bridge.imgmsg_to_cv2(image_rgb, desired_encoding='bgr8')
 
-    def generate_response(self,img = 'default_img', prompt="what do you see?", bbox=[[0, 0, 640, 480]], max_length=1000):
+    def viz_to_text(self,img = 'default_img', prompt="what do you see?", bbox=[0, 0, 640, 480], max_length=1000):
         '''
         A function that ...
         Reference: https://platform.openai.com/docs/guides/vision
@@ -112,6 +112,8 @@ class VisionToText:
             data = response.json()
             content = data["choices"][0]["message"]["content"]
             #    text_list.append(content)
+        
+        os.remove(temp_directory)
         return content # text_list
 
 
@@ -129,7 +131,7 @@ if __name__ == "__main__":
 
         ## sub loop controlling add a movement feature
         if control_selection == "1":
-            response_text = combined_class.generate_response()
+            response_text = combined_class.viz_to_text()
             print(response_text)
         
         elif control_selection == "2":

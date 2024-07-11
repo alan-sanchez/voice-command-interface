@@ -19,7 +19,7 @@ class SpeechToText:
         ## Initialize the OpenAI client with the API key
         self.client = OpenAI(api_key=self.key)
 
-    def convert_to_text(self, filename=".wav"):
+    def convert_to_text(self, file_dir="intro.wav"):
         """
         Converts text to speech and saves it to a file.
         Link:https://platform.openai.com/docs/guides/speech-to-text
@@ -28,14 +28,19 @@ class SpeechToText:
         text (str): The text to convert to speech.
         filename (str): The filename to save the speech audio.
         """
-        audio_dir = os.path.join(os.environ['HOME'],self.relative_path,filename) 
-        audio_file= open(audio_dir, "rb")
+        if file_dir == "intro.wav":
+            audio_dir = os.path.join(os.environ['HOME'],self.relative_path,file_dir)
+
+        else:
+            audio_dir = file_dir
+
+        audio_file= open(audio_dir, "rb")        
         transcription = self.client.audio.transcriptions.create(
             model="whisper-1", 
             file=audio_file
         )
-        print(transcription.text)
-           
+        # print(transcription.text)
+        return(transcription.text)           
 
 if __name__ == '__main__':
     ## Create an instance of the TextToSpeech class
@@ -44,3 +49,8 @@ if __name__ == '__main__':
 
     ## Run speech function with user inputs
     stt.convert_to_text("intro.wav")
+
+
+#Landing cite reconissance
+## Mission concept study, Julie and John (Systems engineer) about hoppers
+## 
