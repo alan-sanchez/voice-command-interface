@@ -157,7 +157,7 @@ class VisionToText(OpenAIBase):
                 prompt = file.read()
         
 
-        ## Crop the image using the provided bounding box coordinates
+        ## Crop the image using the provided bounding box coordinates. Default is the whole image, assuming its size is 640x480 pixels
         cropped_image = img[bbox[1]:bbox[3], bbox[0]:bbox[2]]
         
         ## Define the temporary image file name, path, and save the cropped image to the the temp directory
@@ -255,8 +255,6 @@ class TextToText(OpenAIBase):
         return response.choices[0].message.content
 
 if __name__ == "__main__":
-    rospy.init_node('gpt_features')
-
     stt = SpeechToText()
     tts = TextToSpeech()
     vtt = VisionToText()
