@@ -36,28 +36,29 @@ signal.signal(signal.SIGINT, signal_handler)
 
 class ObjectSegmentation():  #(Cluster, VisionToText, BBox):
     '''
-
+    A class that handles object segmentation using various techniques such as clustering and bounding box computations.
     '''
     def __init__(self):
         '''
         Constructor method for initializing the ObjectSegmentation class.
         '''
+        ## Initialize objects for bounding box computation, clustering, and vision-to-text conversion
         self.bbox_obj = BBox()
         self.cluster_obj = Cluster()
         self.vtt_obj = VisionToText()
 
-
-        ##
+        ## Initialize subscriber
         self.sub = rospy.Subscriber('/talk', String, self.talk_callback, queue_size=10)
 
+        ## Define the filename for the prompt that instructs the VLM how to label objects
         self.label_prompt_filename = 'drink_label_prompt'#UV_label_prompt.txt
 
-        ## Specify the relative and images directory path
+        ## Specify the relative path for the directories
         self.relative_path = 'catkin_ws/src/voice_command_interface/'
         updated_map_dir = os.path.join(os.environ['HOME'], self.relative_path, 'prompts/', 'updated_map.txt')
         self.dictionary_dir = os.path.join(os.environ['HOME'], self.relative_path, 'prompts/', 'dictionary_info.txt')
 
-        ## 
+        ## Read the updated map prompt from a file
         with open(updated_map_dir, 'r') as file:
             self.updated_map_prompt = file.read()
         
@@ -88,23 +89,29 @@ class ObjectSegmentation():  #(Cluster, VisionToText, BBox):
 
     def talk_callback(self, str_msg):
         '''
-        
+        Callback function for the /talk topic.
+
+        Parameters:
+        - self: The self reference.
+        - str_msg (String): The received string message.
         '''
         if str_msg.data == "start":
-            ## 
+            ## Segment the image and label the objects
             dict = self.segment_image(visual_debugger=True)
             self.label_images(dict)
             # with open(self.dictionary_dir, 'w') as json_file:
             #     json.dump(self.object_location_dict, json_file, indent=4)
 
-            ## 
+            ## Start a timer to periodically check the location of the objects
             self.timer = rospy.Timer(rospy.Duration(5), self.timer_callback)            
-
-        # elif str_msg == "help":
 
 
     def timer_callback(self, event):
         '''
+        Callback function for the timer event.
+
+        Parameters:
+        - event: The timer event.
         '''
         self.location_updater()
 
@@ -131,7 +138,7 @@ class ObjectSegmentation():  #(Cluster, VisionToText, BBox):
         - visual_debugger (bool): Boolean used for the visual debugging process.
 
         Returns:
-        - 
+        - regions_dict (dict): Dictionary containing regions with bounding boxes for each detected object. 
         '''
         ## Initialize a new point cloud message type to store position data.
         temp_cloud = PointCloud()
@@ -140,7 +147,7 @@ class ObjectSegmentation():  #(Cluster, VisionToText, BBox):
         ## Convert the image message to an OpenCV image format using the bridge
         raw_image = self.bridge.imgmsg_to_cv2(self.img_msg, desired_encoding='bgr8')
         
-        ## 
+        ## Initialize lists to store x, y, z coordinates
         x = []
         y = []
         z = []
@@ -155,24 +162,24 @@ class ObjectSegmentation():  #(Cluster, VisionToText, BBox):
             y.append(point.y)
             z.append(point.z)
         
-        ## 
+        ## Combine x, y, z coordinates into a single array and fit a plane to determine table height 
         arr = np.column_stack((x,y,z))
         plane1 = pyrsc.Plane()
         best_eq, _ = plane1.fit(arr, 0.01)
         table_height = abs(best_eq[3]) + self.table_height_buffer
         # print(best_eq)
 
-        ## Pull coordinates of items on the table
+        ## Extract coordinates of items on the table
         object_pcl_coordinates = []        
         for i in range(len(z)):
             if (z[i] > table_height) and (x[i] < self.max_table_reach):
                 object_pcl_coordinates.append([float(x[i]), float(y[i]), float(z[i])])
         object_pcl_coordinates = np.array(object_pcl_coordinates)
         
-        ## Create region dictionary
+        ## Create region dictionary by clustering the object's x and y coordinates
         regions_dict = self.cluster_obj.compute_regions(object_pcl_coordinates)
 
-        ## 
+        ## Compute bounding boxes for each region and update the regions dictionary
         bbox_list = []
         for id in regions_dict:
             bbox = self.bbox_obj.compute_bbox(regions_dict[id])
@@ -189,6 +196,7 @@ class ObjectSegmentation():  #(Cluster, VisionToText, BBox):
                 temp_directory = os.path.join(os.environ['HOME'], self.relative_path, 'images', img_name)
                 cv2.imwrite(temp_directory, cropped_image)
 
+        ## Return the dictionary containing regions with bounding boxes for each detected object
         return regions_dict   
 
     def label_images(self,regions_dict):
@@ -213,28 +221,32 @@ class ObjectSegmentation():  #(Cluster, VisionToText, BBox):
         '''
         Updates the locations of objects based on the segmented image data and the current object locations.
         '''
-        ## 
+        ## Segment the current image to get data for the current frame and 
+        ## create a copy of the current object location dictionary
         current_data_dict = self.segment_image()
         copy_obj_dict = self.object_location_dict.copy()
         
-        ##
+        ## Iterate over each object in the current location dictionary
         for label, centroid in self.object_location_dict.items():
             for key in current_data_dict:
+                ## Calculate the Euclidean distance between the current object and the new detected object
                 euclidean_dist = np.linalg.norm(np.array(centroid) - np.array(current_data_dict[key]["centroid"]))
                 
+                ## If the distance is less than the threshold, consider it the same object
                 if euclidean_dist < self.threshold:
-                    current_data_dict.pop(key)
-                    copy_obj_dict.pop(label)
+                    current_data_dict.pop(key) # Remove the detected object from current data
+                    copy_obj_dict.pop(label) # Remove the label from the copy of the object location dictionary
                     break
         print()
-        ##
+
+        ## If there is exactly one object that moved, update its location in the map
         if len(copy_obj_dict) == 1 and len(current_data_dict) == 1:
             label, = copy_obj_dict
             print(f"The {label} has moved. updating map")
             id = next(iter(current_data_dict))
             self.object_location_dict[label] = current_data_dict[id]["centroid"].copy()
 
-        ## 
+        ## If there are multiple objects that moved, use the VLM to help with updating their locations in the map
         elif len(copy_obj_dict) > 1 and len(current_data_dict) > 1: # for id in current_data_dict:
             keys = copy_obj_dict.keys()
             labels = list(keys)
@@ -242,13 +254,12 @@ class ObjectSegmentation():  #(Cluster, VisionToText, BBox):
 
             ## Convert the image message to an OpenCV image format using the bridge 
             raw_image = self.bridge.imgmsg_to_cv2(self.img_msg, desired_encoding='bgr8')
-
-
-            # if len(copy_obj_dict) < len(current_data_dict):
                 
 
             for id in current_data_dict:
+                ## Use the vision-to-text object to label the detected object based on the updated prompt
                 label = self.vtt_obj.viz_to_text(img=raw_image, prompt=updated_prompt, bbox=current_data_dict[id]["bbox"])
+                
                 if label in labels:
                     self.object_location_dict[label] = current_data_dict[id]["centroid"].copy()
                 else:

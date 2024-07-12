@@ -73,7 +73,7 @@ class TextToSpeech(OpenAIBase):
     """
     def __init__(self):
         '''
-        Constructor method for initialzing inherited class.
+        Constructor method for initializing inherited class.
         '''
         super().__init__()
 
@@ -121,7 +121,7 @@ class VisionToText(OpenAIBase):
     '''
     def __init__(self):
         '''
-        Constructor method for initialzing inherited class and a default image.
+        Constructor method for initializing inherited class and a default image.
         '''
         super().__init__()
 
@@ -215,7 +215,7 @@ class TextToText(OpenAIBase):
     """
     def __init__(self):
         '''
-        Constructor method for initialzing inherited class.
+        Constructor method for initializing inherited class.
         '''
         super().__init__()
         
