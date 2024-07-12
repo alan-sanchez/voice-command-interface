@@ -43,7 +43,7 @@ class SpeechToText(OpenAIBase):
         '''
         super().__init__()
 
-    def convert_to_text(self, file_name="intro"):
+    def convert_to_text(self, filename="intro"):
         '''
         Converts text to speech and saves it to a file.
         Link:https://platform.openai.com/docs/guides/speech-to-text
@@ -56,10 +56,11 @@ class SpeechToText(OpenAIBase):
         transcription.txt (str): The transcribed audio.
         '''
         ## Define audio directory
-        audio_dir = os.path.join(os.environ['HOME'], self.relative_path, 'audio_files', file_name + '.wav')
+        if filename == "intro":
+            filename = os.path.join(os.environ['HOME'], self.relative_path, 'audio_files', filename + '.wav') 
 
         ## Ready file
-        with open(audio_dir, "rb") as audio_file:
+        with open(filename, "rb") as audio_file:
             transcription = self.client.audio.transcriptions.create(model="whisper-1", file=audio_file)
         
         ## Return transcibed text
