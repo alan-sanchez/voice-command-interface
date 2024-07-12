@@ -28,7 +28,7 @@ class BarTask():
         #
         self.pub = rospy.Publisher('/talk', String, queue_size=10)
         
-        ## Specify the relative and images directory path
+        ## Specify the relative and audio directory paths
         self.relative_path = 'catkin_ws/src/voice_command_interface/'
         self.intro_audio_dir = os.path.join(os.environ['HOME'], self.relative_path, 'audio_files/intro.wav')
         self.voice_recording_dir = os.path.join(os.environ['HOME'], self.relative_path, 'audio_files/voice_record.wav')

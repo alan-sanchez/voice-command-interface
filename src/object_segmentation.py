@@ -290,3 +290,7 @@ if __name__=="__main__":
     #         rospy.sleep(5)
     #         obj.location_updater()
         
+    ### Trying to point milliarcsec 
+    ## how much power dawn generated
+    ## Duration of cruise not to exceed 7 years. 
+    ###

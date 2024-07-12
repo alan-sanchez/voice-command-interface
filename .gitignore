@@ -21,3 +21,4 @@
 /src/speech_to_text.py
 /src/text_to_speech.py
 /src/vision_to_text.py
+/src/audio_node.py
