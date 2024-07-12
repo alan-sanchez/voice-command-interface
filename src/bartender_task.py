@@ -3,17 +3,14 @@
 import rospy
 import sys
 import os
-
 import sounddevice as sd
 import soundfile as sf
-
-# from object_segmentation import ObjectSegmentation
-from speech_to_text import SpeechToText
-from text_to_speech import TextToSpeech
+from gpt_features import SpeechToText, TextToText, TextToSpeech
 from scipy.io.wavfile import write
 from pathlib import Path
 from openai import OpenAI
 from std_msgs.msg import String
+from halo import Halo
 
 class BarTask():
     """
@@ -21,17 +18,15 @@ class BarTask():
     """
     def __init__(self):
         """
-
         Parameters:
         - self: The self reference. 
         """
-        #
         self.pub = rospy.Publisher('/talk', String, queue_size=10)
         
         ## Specify the relative and audio directory paths
         self.relative_path = 'catkin_ws/src/voice_command_interface/'
-        self.intro_audio_dir = os.path.join(os.environ['HOME'], self.relative_path, 'audio_files/intro.wav')
-        self.voice_recording_dir = os.path.join(os.environ['HOME'], self.relative_path, 'audio_files/voice_record.wav')
+        self.system_filename = 'system_prompt'
+
         
         ## Get the OpenAI API key from environment variables
         self.key = os.environ.get("openai_key")
@@ -41,43 +36,44 @@ class BarTask():
 
         ##
         self.stt = SpeechToText()
+        self.ttt = TextToText()
 
         ## Recording parameters: sampling rate and duration
-        self.fs = 44100 # Sampling rate in Hz
-        self.seconds = 6 # Recording duration in seconds
+        self.fs = 44100  # Sampling rate in Hz
+        self.default_time = 10
+
+        ##
+        self.spinner = Halo(text='Computing response', spinner='dots')
 
         ## Log initialization notifier
         rospy.loginfo('{}: is ready.'.format(self.__class__.__name__))
 
-    def run_script(self):
+    def record_audio(self):
         """
-        Callback function that gets called when a new message is received on the subscribed topic.
-        Parameters:
-        - self: The self reference.
-        - msg (String): The string message coming in from initial greeting
+        Method to record audio.
         """
-        input("Press Enter to start vocal interaction.")
-        self.pub.publish("start")
-        ## Begin greeting
-        data, fs = sf.read(self.intro_audio_dir, dtype='float32')
-        sd.play(data, fs)
-        status = sd.wait() # Wait until playback is finished
+        # Record audio from the microphone
+        print("Recording... Press Enter to stop.")
+        self.myrecording = sd.rec(int(self.default_time * self.fs), samplerate=self.fs, channels=2)
+        input()  # Wait for the user to press Enter to stop the recording
+        sd.stop()
+        
+        self.spinner.start()
 
-        ## Begin voice recording
-        # Record audio from the microphone for the specified duration
-        myrecording = sd.rec(int(self.seconds * self.fs), samplerate=self.fs, channels=2)
-        sd.wait()  # Wait until recording is finished
-
+        temp_filename = "temp_recording.wav"
         ## Save the recorded audio as a WAV file
-        write(self.voice_recording_dir, self.fs, myrecording)  # Save as WAV file 
-        transcription = self.stt.convert_to_text(self.voice_recording_dir)
-        print(transcription)
-    
-        ##
+        write(temp_filename, self.fs, self.myrecording)  # Save as WAV file 
+        
+        ## Use whisper speech to text (stt) converter
+        transcript = self.stt.convert_to_text(temp_filename)
+        os.remove(temp_filename)
+        
         
 
-    # def suggestion(self):
-
+        response = self.ttt.text_to_text(system_filename=self.system_filename, user_prompt = transcript)
+        self.spinner.stop()
+        # print)
+        return response
 
 
 if __name__ == '__main__':
@@ -86,7 +82,8 @@ if __name__ == '__main__':
 
     ## Create an instance of the AudioCommunication class
     obj = BarTask()
-    obj.run_script()
 
-    ## Keep the program running and listening for callbacks
-    # rospy.spin()
+    while True:
+        input("Press Enter to start recording")
+        transcript = obj.record_audio()
+        print(transcript)
