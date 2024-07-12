@@ -22,6 +22,7 @@ from sensor_msgs.msg import PointCloud2, Image, PointCloud
 from geometry_msgs.msg import Point32
 from cv_bridge import CvBridge
 from std_msgs.msg import String
+from halo import Halo
 
 ## Define a class attribute or a global variable as a flag
 interrupted = False
@@ -34,7 +35,7 @@ def signal_handler(signal, frame):
 ## Assign the signal handler to the SIGINT signal
 signal.signal(signal.SIGINT, signal_handler)
 
-class ObjectSegmentation():  #(Cluster, VisionToText, BBox):
+class ObjectSegmentation():
     '''
     A class that handles object segmentation using various techniques such as clustering and bounding box computations.
     '''
@@ -45,10 +46,7 @@ class ObjectSegmentation():  #(Cluster, VisionToText, BBox):
         ## Initialize objects for bounding box computation, clustering, and vision-to-text conversion
         self.bbox_obj = BBox()
         self.cluster_obj = Cluster()
-        self.vtt_obj = VisionToText()
-
-        ## Initialize subscriber
-        self.sub = rospy.Subscriber('/talk', String, self.talk_callback, queue_size=10)
+        self.vtt_obj = VisionToText()            
 
         ## Define the filename for the prompt that instructs the VLM how to label objects
         self.label_prompt_filename = 'drink_label_prompt'#UV_label_prompt.txt
@@ -84,28 +82,16 @@ class ObjectSegmentation():  #(Cluster, VisionToText, BBox):
         self.object_location_dict = {}
         self.threshold = .015 # in meters
 
+        ##
+        self.start = True
+       
+        ## 
+        self.timer = rospy.Timer(rospy.Duration(2), self.timer_callback)
+
         ## Log initialization notifier
-        rospy.loginfo('{}: is ready.'.format(self.__class__.__name__))
+        rospy.loginfo('{}: is booting up.'.format(self.__class__.__name__))
 
-    def talk_callback(self, str_msg):
-        '''
-        Callback function for the /talk topic.
-
-        Parameters:
-        - self: The self reference.
-        - str_msg (String): The received string message.
-        '''
-        if str_msg.data == "start":
-            ## Segment the image and label the objects
-            dict = self.segment_image(visual_debugger=True)
-            self.label_images(dict)
-            # with open(self.dictionary_dir, 'w') as json_file:
-            #     json.dump(self.object_location_dict, json_file, indent=4)
-
-            ## Start a timer to periodically check the location of the objects
-            self.timer = rospy.Timer(rospy.Duration(5), self.timer_callback)            
-
-
+    
     def timer_callback(self, event):
         '''
         Callback function for the timer event.
@@ -113,7 +99,17 @@ class ObjectSegmentation():  #(Cluster, VisionToText, BBox):
         Parameters:
         - event: The timer event.
         '''
-        self.location_updater()
+        ##
+        if self.start == True:
+            spinner = Halo(text='Loading', spinner='dots')
+            spinner.start()
+            rospy.sleep(3)
+            spinner.stop()
+            rospy.loginfo("{}: is up and running!".format(self.__class__.__name__))
+            self.start = False
+        
+        else:
+            self.location_updater()
 
 
     def callback_sync(self, pcl2_msg, img_msg):
@@ -274,8 +270,15 @@ if __name__=="__main__":
 
     ## Instantiate the `CoordinateEstimation` class
     obj = ObjectSegmentation()
-
+    
+    rospy.sleep(3)
+    dict = obj.segment_image(visual_debugger=True)
+    obj.label_images(dict)
+    
     rospy.spin()
+
+    # while True:
+    #     obj.location_update()
 
     # print("\n\nEnter 1 for Fetch to segment what it sees. \nElse enter anything or ctrl+c to exit the node\n")
     # control_selection = input("Choose an option: ")
@@ -289,8 +292,3 @@ if __name__=="__main__":
     #     while True:
     #         rospy.sleep(5)
     #         obj.location_updater()
-        
-    ### Trying to point milliarcsec 
-    ## how much power dawn generated
-    ## Duration of cruise not to exceed 7 years. 
-    ###
