@@ -69,7 +69,7 @@ class Cluster:
     
         ## Remove components that are too big (tabletop) or too small (noise)
         largest_area_index = np.argmax(self.stats[:, 4])
-        mask = np.logical_or(self.stats[:, 4] <= 30, self.stats[:, 4] == self.stats[largest_area_index, 4])
+        mask = np.logical_or(self.stats[:, 4] <= 10, self.stats[:, 4] == self.stats[largest_area_index, 4])
 
         ## Get the indices of the components that are too big or too small
         self.indices = np.where(mask)[0]
@@ -101,9 +101,8 @@ class Cluster:
             z_values = [point[2] for point in self.region_dict[id]["points"]]
             max_z_value = max(z_values)
         
-            self.region_dict[id]["centroid"] = [x_centroid, y_centroid, max_z_value]
+            self.region_dict[id]["centroid"] = [round(x_centroid,3), round(y_centroid,3), round(max_z_value,3)]
 
-        
         return self.region_dict
 
 
