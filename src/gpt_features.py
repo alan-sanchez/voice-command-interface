@@ -7,9 +7,8 @@ import sounddevice as sd
 import soundfile as sf
 import signal
 from openai import OpenAI
-from sensor_msgs.msg import Image
-from cv_bridge import CvBridge, CvBridgeError
-import rospy
+# from sensor_msgs.msg import Image
+from cv_bridge import CvBridge
 
 # Signal handling for interruption
 interrupted = False
@@ -78,7 +77,7 @@ class TextToSpeech(OpenAIBase):
         '''
         super().__init__()
 
-    def convert_to_speech(self, text='Hello World!', filename="default"):
+    def convert_to_speech(self, text='Hello World!', filename="speech.wav"):
         """
         Converts text to speech and saves it to a file.
         Link:https://platform.openai.com/docs/guides/text-to-speech
@@ -91,9 +90,9 @@ class TextToSpeech(OpenAIBase):
         response = self.client.audio.speech.create(model="tts-1", voice="alloy", input=text)
 
         ## Construct the full file path for saving the audio file and save the response
-        file_dir = os.path.join(os.environ['HOME'], self.relative_path, 'audio_files', filename + ".wav")
+        file_dir = os.path.join(os.environ['HOME'], self.relative_path, 'audio_files', filename)
         response.stream_to_file(file_dir)
-        print(filename + ".wav saved")
+        # print(filename + " saved")
 
     def playback(self, filename):
         """
@@ -103,13 +102,13 @@ class TextToSpeech(OpenAIBase):
         filename (str): The filename of the audio file to play back.
         """
         ## Construct the full file path for the audio file
-        file_dir = os.path.join(os.environ['HOME'], self.relative_path, 'audio_files', filename + ".wav")
+        file_dir = os.path.join(os.environ['HOME'], self.relative_path, 'audio_files', filename )
         
         ## Check if the file exists, if so, then play it back
         if os.path.exists(file_dir):
             data, fs = sf.read(file_dir, dtype='float32')
             sd.play(data, fs)
-            print(f"Playing {file_dir}")
+            # print(f"Playing {file_dir}")
             status = sd.wait()
         else:
             print(f"File {file_dir} does not exist.")
@@ -134,7 +133,7 @@ class VisionToText(OpenAIBase):
         image_bgr = cv2.imread(default_image_dir)
         self.default_image = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
 
-    def viz_to_text(self, img='default', bbox=[0, 0, 640, 480], prompt_filename=None, max_length=1000):
+    def viz_to_text(self, img='default', bbox=[0, 0, 640, 480], prompt_filename=None, prompt="what do you see?", max_length=1000):
         '''
         A function that performs vision-to-text conversion using OpenAI's API.
         Reference: https://platform.openai.com/docs/guides/vision
@@ -150,13 +149,11 @@ class VisionToText(OpenAIBase):
             img = self.default_image
         
         ## Use conditional statement to pull text from the prompt directory
-        if prompt_filename == None:
-            prompt="what do you see?"
-        else:
-            prompt_dir = os.path.join(os.environ['HOME'], self.relative_path, 'prompts/', prompt_filename + '.txt')
+        if prompt_filename != None:
+            prompt_dir = os.path.join(os.environ['HOME'], self.relative_path, 'prompts/', prompt_filename)
             with open(prompt_dir, 'r') as file:
                 prompt = file.read()
-        
+    
 
         ## Crop the image using the provided bounding box coordinates. Default is the whole image, assuming its size is 640x480 pixels
         cropped_image = img[bbox[1]:bbox[3], bbox[0]:bbox[2]]
@@ -221,34 +218,47 @@ class TextToText(OpenAIBase):
         super().__init__()
         
 
-    def text_to_text(self, system_filename=None, user_prompt='Hello!'):
+    def text_to_text(self, system_filename=None, assistant_filename=None, user_prompt='Hello!'):
         '''
         Generates a response from the OpenAI API based on a system prompt and a user prompt.
+        Link: https://platform.openai.com/docs/guides/text-generation/chat-completions-api
 
         Parameters:
-        - system_filename (str): The filename of the system prompt text file (without extension). Defaults to None.
+        - system_filename (str or None): The filename of the system prompt text file (without extension). Defaults to None.
         - user_prompt (str): The prompt/question provided by the user. Defaults to 'Hello!'.
 
         Returns:
         - response_content (str): The generated response from the OpenAI API.
         '''
-        ## Determine if the file path for the system prompt
+        ## Extract the file path for the system prompt
         if system_filename == None:
             ## Use the default system prompt file if no filename is provided
-            file_dir = os.path.join(os.environ['HOME'], self.relative_path, 'prompts', "system_prompt.txt")
+            system_dir = os.path.join(os.environ['HOME'], self.relative_path, 'prompts', "system_prompt.txt")
         else:
-            file_dir = os.path.join(os.environ['HOME'], self.relative_path, 'prompts', system_filename + '.txt')
+            system_dir = os.path.join(os.environ['HOME'], self.relative_path, 'prompts', system_filename)
+
+         ## Extract the file path for the assistant prompt
+        if assistant_filename == None:
+            ## Use the default system prompt file if no filename is provided
+            assistant_dir = os.path.join(os.environ['HOME'], self.relative_path, 'prompts', "assistant_prompt.txt")
+        else:
+            assistant_dir = os.path.join(os.environ['HOME'], self.relative_path, 'prompts', assistant_filename)
 
         ## Read the system prompt from the specified file
-        with open(file_dir, 'r') as file:
+        with open(system_dir, 'r') as file:
             system_prompt = file.read()
+
+        ## Read the assistant prompt from the specified file
+        with open(assistant_dir, 'r') as file:
+            assistant_prompt = file.read()    
                 
         ## Create the chat completion request using the OpenAI API
         response = self.client.chat.completions.create(
             model="gpt-4o",
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
+                {"role": "user", "content": user_prompt},
+                # {"role": "assistant", "content": assistant_prompt}
             ]
             )
         
@@ -275,7 +285,7 @@ if __name__ == "__main__":
             print(f"Converted Text: {text}")
 
         elif control_selection == "2":
-            tts.convert_to_speech("Hello, Skinny Human.", "intro")
+            tts.convert_to_speech("Hello, Skinny Human.", "intro.wav")
             tts.playback("intro")
 
         elif control_selection == "3":
