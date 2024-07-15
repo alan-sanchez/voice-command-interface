@@ -218,7 +218,7 @@ class TextToText(OpenAIBase):
         super().__init__()
         
 
-    def text_to_text(self, system_filename=None, assistant_filename=None, user_prompt='Hello!'):
+    def text_to_text(self, system_filename=None, user_prompt='Hello!'):
         '''
         Generates a response from the OpenAI API based on a system prompt and a user prompt.
         Link: https://platform.openai.com/docs/guides/text-generation/chat-completions-api
@@ -237,20 +237,9 @@ class TextToText(OpenAIBase):
         else:
             system_dir = os.path.join(os.environ['HOME'], self.relative_path, 'prompts', system_filename)
 
-         ## Extract the file path for the assistant prompt
-        if assistant_filename == None:
-            ## Use the default system prompt file if no filename is provided
-            assistant_dir = os.path.join(os.environ['HOME'], self.relative_path, 'prompts', "assistant_prompt.txt")
-        else:
-            assistant_dir = os.path.join(os.environ['HOME'], self.relative_path, 'prompts', assistant_filename)
-
         ## Read the system prompt from the specified file
         with open(system_dir, 'r') as file:
             system_prompt = file.read()
-
-        ## Read the assistant prompt from the specified file
-        with open(assistant_dir, 'r') as file:
-            assistant_prompt = file.read()    
                 
         ## Create the chat completion request using the OpenAI API
         response = self.client.chat.completions.create(
@@ -258,7 +247,6 @@ class TextToText(OpenAIBase):
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
-                # {"role": "assistant", "content": assistant_prompt}
             ]
             )
         
