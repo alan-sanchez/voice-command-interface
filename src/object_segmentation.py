@@ -81,18 +81,18 @@ class ObjectSegmentation():
         
         ## Initialize variables and constants
         self.pcl2_msg = None
-        self.table_height_buffer = 0.03 # in meters
-        self.max_table_reach = 0.85 # in meters
+        self.table_height_buffer = 0.027 # in meters
+        self.max_table_reach = 0.8 # in meters
         self.object_map_dict = {}
         self.threshold = .018 # in meters
 
-        ##
+        ## Start flag for initial run
         self.start = True
 
-        ## 
+        ## JSON data to be published
         self.json_data = None
        
-        ## 
+        ## Initialize a timer to periodically update locations
         self.timer = rospy.Timer(rospy.Duration(3), self.timer_callback)
 
         ## Log initialization notifier
@@ -106,11 +106,9 @@ class ObjectSegmentation():
         Parameters:
         - event: The timer event.
         '''
-        #
         if self.start == True:
             rospy.loginfo("{}: is up and running!".format(self.__class__.__name__))
-            self.start = False
-        
+            self.start = False 
         else:
             self.location_updater()
 
@@ -226,7 +224,7 @@ class ObjectSegmentation():
         self.json_data = json.dumps(self.object_map_dict)
         self.pub.publish(self.json_data)
 
-        # print(self.object_map_dict)
+        print(self.object_map_dict)
 
 
     def location_updater(self):
