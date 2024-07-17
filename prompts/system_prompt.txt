@@ -6,8 +6,8 @@ The following is exactly what needs to be generated:
 {'A': 'Hello, skinny human.'} 
 
 
-Question type B - If the bartender ask's what kind of drinks it can make from the following list of materials provided:
-['Squirt soda bottle', 'Tequila', 'Salt Shaker']
+Question type B - If the bartender is asking what kind of drinks they can make from the following list of materials provided:
+['White rum (Bacardi) bottle', 'Salt shaker', 'Squirt soda', 'Whiskey bottle']
 respond with a dictionary, where the key is the letter 'B' and the values is a list of names of drinks the bartender can make.
 
 Question type C - If the bartender asks if you can pick up an item, select the object that closesly relates to that from the list of materials.
