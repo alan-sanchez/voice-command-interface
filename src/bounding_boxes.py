@@ -31,7 +31,7 @@ class BBox():
         self.CY_DEPTH = 223.8369337605044
 
         ## Bounding box margin
-        self.pixel_margin = 5 #number of pixels
+        self.pixel_margin = 15 #number of pixels
 
     def compute_bbox(self, region_dict_value):
         '''
