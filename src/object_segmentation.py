@@ -45,20 +45,18 @@ class ObjectSegmentation():
         '''
         ## Initialize objects for bounding box computation, clustering, and vision-to-text conversion
         self.bbox_obj = BBox()
-        self.cluster_obj = Cluster()
+        self.cluster_obj = Cluster(pixel_size=0.005, dilation_size=10)
         self.vtt_obj = VisionToText()            
 
         ## Define the filename for the prompt that instructs the VLM how to label objects
-        self.label_prompt_filename = 'drink_label_prompt.txt'#UV_label_prompt.txt
+        self.label_prompt_filename = 'label_prompt.txt'
 
         ## Initialize publisher
-        self.pub = rospy.Publisher('/object_map', String, queue_size=10)
+        self.object_map_pub = rospy.Publisher('/object_map', String, queue_size=10)
 
-
-        ## Specify the relative path for the directories
+        ## Specify the relative path for the txt files that handle the updated maps
         self.relative_path = 'catkin_ws/src/voice_command_interface/'
         updated_map_dir = os.path.join(os.environ['HOME'], self.relative_path, 'prompts/', 'updated_map.txt')
-        self.dictionary_dir = os.path.join(os.environ['HOME'], self.relative_path, 'prompts/', 'dictionary_info.txt')
 
         ## Read the updated map prompt from a file
         with open(updated_map_dir, 'r') as file:
@@ -81,10 +79,11 @@ class ObjectSegmentation():
         
         ## Initialize variables and constants
         self.pcl2_msg = None
-        self.table_height_buffer = 0.027 # in meters
+        self.table_height_buffer = 0.035 # in meters
         self.max_table_reach = 0.8 # in meters
         self.object_map_dict = {}
-        self.threshold = .018 # in meters
+        # self.status_dict = {'clean':[], 'contaminated':[]}
+        self.threshold = .05 # in meters
 
         ## Start flag for initial run
         self.start = True
@@ -107,7 +106,7 @@ class ObjectSegmentation():
         - event: The timer event.
         '''
         if self.start == True:
-            rospy.loginfo("{}: is up and running!".format(self.__class__.__name__))
+            rospy.sleep(5)
             self.start = False 
         else:
             self.location_updater()
@@ -189,7 +188,6 @@ class ObjectSegmentation():
             regions_dict[id]["bbox"] = bbox
             del regions_dict[id]["points"]
 
-
         ## Conditional statement to visualize the segmented images and the x and y coordinates 
         if visual_debugger:
             for k, bbox in enumerate(bbox_list):
@@ -214,15 +212,22 @@ class ObjectSegmentation():
         - self: The self reference.
         - regions_dict(dictionary): 
         '''
+        
         ## Convert the image message to an OpenCV image format using the bridge 
         raw_image = self.bridge.imgmsg_to_cv2(self.img_msg, desired_encoding='bgr8')
 
         for id in regions_dict:
             label = self.vtt_obj.viz_to_text(img=raw_image, bbox=regions_dict[id]["bbox"], prompt_filename = self.label_prompt_filename)
-            self.object_map_dict[label] = regions_dict[id]["centroid"]
-        
+            self.object_map_dict[label] = {
+                'centroid': regions_dict[id]["centroid"],
+                'status': 'clean'
+                }
+
+        if self.start:
+            rospy.loginfo("{}: is up and running!".format(self.__class__.__name__))
+                
         self.json_data = json.dumps(self.object_map_dict)
-        self.pub.publish(self.json_data)
+        self.object_map_pub.publish(self.json_data)
 
         print(self.object_map_dict)
 
@@ -231,15 +236,17 @@ class ObjectSegmentation():
         '''
         Updates the locations of objects based on the segmented image data and the current object locations.
         '''
+
         ## Segment the current image to get data and create a copy of the current object location dictionary
         current_data = self.segment_image()
         copy_obj_map = self.object_map_dict.copy()
         
         ## Iterate over each object in the current location dictionary
-        for label, centroid in self.object_map_dict.items():
+        for label, data in self.object_map_dict.items():
+            centroid = data['centroid']
             for key in current_data:
                 ## Calculate the Euclidean distance between the current object and the new detected object
-                euclidean_dist = np.linalg.norm(np.array(centroid) - np.array(current_data[key]["centroid"]))
+                euclidean_dist = np.linalg.norm(np.array(centroid) - np.array(current_data[key]['centroid']))
                 
                 ## If the distance is less than the threshold, consider it the same object
                 if euclidean_dist < self.threshold:
@@ -252,11 +259,14 @@ class ObjectSegmentation():
             label, = copy_obj_map
             print(f"The {label} has moved. updating map")
             id = next(iter(current_data))
-            self.object_map_dict[label] = current_data[id]["centroid"].copy()
+            self.object_map_dict[label]['centroid'] = current_data[id]["centroid"].copy()
+            self.object_map_dict[label]['status'] = 'contaminated'
 
             ## Publish the dictionary as a String
             self.json_data = json.dumps(self.object_map_dict)
-            self.pub.publish(self.json_data)
+            self.object_map_pub.publish(self.json_data)
+            # print(self.object_map_dict)
+            # print()
 
         ## If there are multiple objects that moved, use the VLM to help with updating their locations in the map
         elif len(copy_obj_map) > 1 and len(current_data) > 1: 
@@ -272,15 +282,19 @@ class ObjectSegmentation():
                 label = self.vtt_obj.viz_to_text(img=raw_image, prompt=updated_prompt, bbox=current_data[id]["bbox"])
                 
                 if label in labels:
-                    self.object_map_dict[label] = current_data[id]["centroid"].copy()
+                    self.object_map_dict[label]['centroid'] = current_data[id]["centroid"].copy()
+                    self.object_map_dict[label]['status'] = 'contaminated'
                 else:
                     print(label)
 
             ## Publish the dictionary as a String
             self.json_data = json.dumps(self.object_map_dict)
-            self.pub.publish(self.json_data)
+            self.object_map_pub.publish(self.json_data)
             
             print(f"The {labels} have moved. Updating map")
+            # print(self.object_map_dict)
+            # print()
+        
             
                 
 if __name__=="__main__":
@@ -290,7 +304,7 @@ if __name__=="__main__":
     ## Instantiate the `CoordinateEstimation` class
     obj = ObjectSegmentation()
     
-    rospy.sleep(1)
+    rospy.sleep(1.5)
     dict = obj.segment_image(visual_debugger=True)
     obj.label_images(dict)
     
