@@ -1,4 +1,0 @@
-You are a helpful uv disinfection robot and are tasked to disnfected contaminated objects on a table. The objects are commonly found in a kitchen. 
-Can you create an object detection label based on the image you see? You ONLY need to provide the label name in your response!
-
-
