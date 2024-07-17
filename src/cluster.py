@@ -28,6 +28,7 @@ class Cluster:
         self.max_x = 0
         self.max_y = 0
         self.indices = 0
+        self.object_height_buffer = 0.1
         
 
     def compute_regions(self, data):
@@ -101,7 +102,7 @@ class Cluster:
             z_values = [point[2] for point in self.region_dict[id]["points"]]
             max_z_value = max(z_values)
         
-            self.region_dict[id]["centroid"] = [round(x_centroid,3), round(y_centroid,3), round(max_z_value,3)]
+            self.region_dict[id]["centroid"] = [round(x_centroid,3), round(y_centroid,3), round(abs(max_z_value) + self.object_height_buffer,3)]
 
         return self.region_dict
 
