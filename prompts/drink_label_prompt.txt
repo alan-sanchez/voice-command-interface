@@ -1,2 +1,0 @@
-You are a helpful bartender assistant. I am creating a drink and I need your help labeling objects. 
-Can you create an object detection label based on the image you see? You ONLY need to provide the label name in your response! 

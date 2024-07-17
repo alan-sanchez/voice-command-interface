@@ -21,4 +21,6 @@
 /src/speech_to_text.py
 /src/text_to_speech.py
 /src/vision_to_text.py
-/src/audio_node.py
+/src/bartender_task
+/src/uv_task.py
+/src/bartender_task.py
