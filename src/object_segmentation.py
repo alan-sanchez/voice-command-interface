@@ -92,7 +92,7 @@ class ObjectSegmentation():
         self.json_data = None
        
         ## Initialize a timer to periodically update locations
-        self.timer = rospy.Timer(rospy.Duration(3), self.timer_callback)
+        self.timer = rospy.Timer(rospy.Duration(2), self.timer_callback)
 
         ## Log initialization notifier
         rospy.loginfo('{}: is booting up.'.format(self.__class__.__name__))
