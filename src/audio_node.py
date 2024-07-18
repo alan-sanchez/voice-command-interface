@@ -1,186 +1,169 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
-## Import modules
 import rospy
 import sys
 import os
-import signal
-import tf
 import json
-import actionlib
-import moveit_commander 
-import moveit_msgs.msg
+import ast
 
-## Import message types and other python libraries
-from moveit_python import PlanningSceneInterface, MoveGroupInterface
-from moveit_msgs.msg import MoveItErrorCodes
-from geometry_msgs.msg import  Pose, Point, Quaternion
-from robot_controllers_msgs.msg import QueryControllerStatesAction, QueryControllerStatesGoal, ControllerState
-from control_msgs.msg import FollowJointTrajectoryAction, FollowJointTrajectoryGoal
-from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
+import sounddevice as sd
+import soundfile as sf
 
+from gpt_features import SpeechToText, TextToText, TextToSpeech
+from scipy.io.wavfile import write
+from pathlib import Path
+from openai import OpenAI
+from std_msgs.msg import String
+from halo import Halo
+from geometry_msgs.msg import Pose
 
-# Define a class attribute or a global variable as a flag
-interrupted = False
-
-# Define a signal handler function
-def signal_handler(signal, frame):
-    global interrupted
-    interrupted = True
-
-# Register the signal handler
-signal.signal(signal.SIGINT, signal_handler)
-
-class MoveGroupClient:
-    '''
-    Class for controlling mid-level operations of the arm.
-    '''
+class BarTask():
+    """
+    A class that handles audio communication using ROS and OpenAI API.
+    """
     def __init__(self):
-        '''
-        A function that ...
-        :param self: The self reference.
-        '''
-        rospy.loginfo("Waiting for MoveIt!")
-        self.client = MoveGroupInterface("arm_with_torso", "base_link")
-
-        ## First initialize `moveit_commander`
-        moveit_commander.roscpp_initialize(sys.argv)
-
+        """
+        Parameters:
+        - self: The self reference. 
+        """
+        ## Initialize subscriber
+        self.object_map_sub = rospy.Subscriber('object_map', String, self.callback, queue_size=10)
+        
         ## Initialize publisher
-        self.waypoint_sub = rospy.Subscriber('waypoint', Pose, self.callback)
+        self.waypoint_pub = rospy.Publisher('waypoint', Pose, queue_size=1)
+        
+        ## Specify the relative and audio directory paths
+        self.relative_path = 'catkin_ws/src/voice_command_interface/'
+        self.system_filename = 'system_prompt.txt'
+        self.system_filename_dir = os.path.join(os.environ['HOME'], self.relative_path, 'prompts', self.system_filename)
+      
+        ## Greeting audio file
+        self.audio_filename = 'intro.wav'
 
-        ## Instantiate a `RobotCommander`_ object. This object is the outer-level
-        ## interface to the robot
-        self.robot = moveit_commander.RobotCommander()
+        ## Get the OpenAI API key from environment variables
+        self.key = os.environ.get("openai_key")
+        
+        ## Initialize the OpenAI client with the API key
+        self.client = OpenAI(api_key=self.key)
 
-        ## Instantiate a `MoveGroupCommander`_ object.  This object is an interface
-        ## to one group of joints.
-        self.group = moveit_commander.MoveGroupCommander("arm_with_torso")
-        self.group.set_end_effector_link("gripper_link") #use gripper_link if it is planar disinfection
+        ##
+        self.stt = SpeechToText()
+        self.ttt = TextToText()
+        self.tts = TextToSpeech()
 
-        ## We create a `DisplayTrajectory`_ publisher which is used later to publish
-        ## trajectories for RViz to visualize:
-        self.display_trajectory_publisher = rospy.Publisher('/move_group/display_planned_path',
-                                                       moveit_msgs.msg.DisplayTrajectory,
-                                                       queue_size=20)
-        rospy.loginfo("...connected")
+        ## Recording parameters: sampling rate and duration
+        self.fs = 44100  # Sampling rate in Hz
+        self.default_time = 10
 
-        ## Padding does not work (especially for self collisions)
-        ## So we are adding a box above the base of the robot
-        self.scene = PlanningSceneInterface("base_link")
-        self.scene.addBox("keepout", 0.25, 0.5, 0.09, 0.15, 0.0, 0.375)
+        ## hard code line number
+        self.line_number = 32
 
-        ## Allow replanning to increase the odds of a solution
-        self.group.allow_replanning(True)
+        ##
+        self.spinner = Halo(text='Computing response', spinner='dots')
 
-        ## Set the maximum velocity and acceleration scaling factors
-        self.group.set_max_velocity_scaling_factor(0.1)  # 10% of the maximum speed
-        self.group.set_max_acceleration_scaling_factor(0.5)  # 10% of the maximum acceleration
-
-        ## Create the list of joints
-        self.joints = ["torso_lift_joint", "shoulder_pan_joint", "shoulder_lift_joint", "upperarm_roll_joint",
-                  "elbow_flex_joint", "forearm_roll_joint", "wrist_flex_joint", "wrist_roll_joint"]
-                
-    def callback(self, pose):
-        # raw_input("Press enter to move pose")
-        state = self.move_to_pose(pose)
-        rospy.sleep(2)
-        self.init_pose()
-
-    def init_pose(self, vel = 0.2):
-        """
-        Function that sends a joint goal that moves the Fetch's arm and torso to
-        the initial position.
-        :param self: The self reference.
-        :param vel: Float value for arm velocity.
-        """
-        ## List of joint values of init position
-        pose =[.27, 1.41, 0.30, -0.22, -2.25, -1.56, 1.80, -0.37,]
-        while not rospy.is_shutdown():
-            result = self.client.moveToJointPosition(self.joints,
-                                                     pose,
-                                                     0.0,
-                                                     wait=True,
-                                                     max_velocity_scaling_factor=vel)
-            if result and result.error_code.val == MoveItErrorCodes.SUCCESS:
-                self.scene.removeCollisionObject("keepout")
-                return 0 
-
-    def move_to_pose(self, pose):
-        # Set the target pose
-        self.group.set_pose_target(pose)
-
-        # Plan the motion to the target pose
-        plan = self.group.plan()
-
-        # print(plan)
-        # Execute the planned motion
-        success = self.group.go(wait=True)
-
-        # # Stop any residual movement
-        # self.group.stop()
-
-        # # Clear the pose target
-        # self.group.clear_pose_targets()
-
-        return success
-
-    
-class PointHeadClient(object):
-    def __init__(self):
-        self.client = actionlib.SimpleActionClient("head_controller/follow_joint_trajectory", FollowJointTrajectoryAction)
-        rospy.loginfo("Waiting for head_controller...")
-        self.client.wait_for_server()
-        rospy.loginfo("...connected")
+        ## Log initialization notifier
+        rospy.loginfo('{}: is ready.'.format(self.__class__.__name__))
         
 
-    def set_pan_tilt(self, pan=0.00, tilt=0.86, duration=1.0):
-        # Create a trajectory point
-        point = JointTrajectoryPoint()
-        point.positions = [pan, tilt]
-        point.time_from_start = rospy.Duration(duration)
+    def callback(self, msg):
+        '''
+        
+        '''
+        self.object_map_dict = json.loads(msg.data)
+        self.label_list = list(self.object_map_dict.keys())
 
-        # Create a trajectory
-        trajectory = JointTrajectory()
-        trajectory.joint_names = ["head_pan_joint", "head_tilt_joint"]
-        trajectory.points = [point]
+        ## Read the file contents
+        with open(self.system_filename_dir, 'r') as file:
+            lines = file.readlines()
 
-        # Create a goal
-        goal = FollowJointTrajectoryGoal()
-        goal.trajectory = trajectory
+        ## Delete the specified line
+        del lines[self.line_number-1]
+        lines.insert(self.line_number - 1, msg.data + '\n')
 
-        # Send the goal to the action server
-        self.client.send_goal(goal)
-        self.client.wait_for_result()
+        ## Write the modified contents back to the file
+        with open(self.system_filename_dir, 'w') as file:
+            file.writelines(lines)
 
 
+    def record_audio(self):
+        """
+        Method to record audio.
+        """
+        # Record audio from the microphone
+        self.myrecording = sd.rec(int(self.default_time * self.fs), samplerate=self.fs, channels=2)
+        input('Recording... Press Enter to stop.')  # Wait for the user to press Enter to stop the recording
+        sd.stop()
+        
+        self.spinner.start()
+
+        temp_filename = 'temp_recording.wav'
+        ## Save the recorded audio as a WAV file
+        write(temp_filename, self.fs, self.myrecording)  # Save as WAV file 
+        
+        ## Use whisper speech to text (stt) converter
+        transcript = self.stt.convert_to_text(temp_filename)
+        os.remove(temp_filename)
+
+        ## 
+        response = self.ttt.text_to_text(system_filename=self.system_filename, user_prompt=transcript)
+        
+        ## 
+        return ast.literal_eval(response)
+    
+    
+    def get_task(self, dict_response):
+        '''
+        
+        '''
+        ## Assuming the dictionary length size is 1
+        key_list = list(dict_response.keys())
+        value_list = list(dict_response.values())
+       
+        ## Greeting condition
+        if key_list[0] == 'A':
+            self.spinner.stop()
+            self.tts.playback(self.audio_filename)
+
+        ## Cocktail list condition 
+        elif key_list[0] == 'B':
+           
+           self.spinner.stop()
+           print(value_list)
+
+        ## Disinfection condition
+        # elif key_list[0] == 'C':
+        #     ##
+        #     print(value_list)
+        #     self.spinner.stop()
+            # self.tts.playback(drink_list_filename)
+            # coordinates = self.object_map_dict.get(value_list[0])
+            
+            # ## Create a Pose message type
+            # p = Pose()
+            # p.position.x = coordinates[0]
+            # p.position.y = coordinates[1]
+            # p.position.z = coordinates[2]
+            # p.orientation.x = 0.0
+            # p.orientation.y = 0.0
+            # p.orientation.z = 0.0
+            # p.orientation.w = 1.0
+
+            # self.waypoint_pub.publish(p)
+            
+            # self.spinner.stop()
+            # print("waypoint sent")
+            
 
 if __name__ == '__main__':
-    ## Initialize the `relax_arm_control` node
-    rospy.init_node('bar_task_executive')
+    ## Initialize the ROS node with the name 'audio_communication'
+    rospy.init_node('audio_communication', argv=sys.argv)
 
-    ## Instantiate the `ArmControl()` object
-    body_obj = MoveGroupClient()
-    head_obj = PointHeadClient()
-    body_obj.init_pose()
-    head_obj.set_pan_tilt(pan=0.45,duration=2)
-    head_obj.set_pan_tilt(pan=-0.45,duration=4)
-    head_obj.set_pan_tilt(duration=2)
+    ## Create an instance of the AudioCommunication class
+    obj = BarTask()
 
-    rospy.spin()
-    # raw_input("Press enter to move Fetch to it's initial arm configuration")
-    # obj.init_pose()
-    # print("")
-    
-    # obj.relax_arm()
-    # raw_input("My arm is in relax mode. You can move it and hover it above the center top of the object you want me to disinfect. Once you have done that, press Enter.")
-    
-    # raw_input("I will start recording the cleaning task once you press enter")
-    # obj.record()
-    ## Notify user that they can move the arm
-    # rospy.loginfo("Relaxed arm node activated. You can now move the manipulator")
-    # print()
-
-    # obj.playback()
-    # rospy.loginfo("Type Ctrl + C when you are done recording")
     # rospy.spin()
+    while True:
+        input("\nPress Enter to start recording")
+        dict_response = obj.record_audio()
+        task = obj.get_task(dict_response)
+        # print(dict_response)
