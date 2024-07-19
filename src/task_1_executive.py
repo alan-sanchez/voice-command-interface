@@ -126,7 +126,7 @@ class TaskExecutive(MoveGroupClient, PointHeadClient):
         ## Initialize subsciber
         self.contaminated_obj_sub = rospy.Subscriber('contaminated_objects',String, self.waypoint_generator)
 
-        self.complete_pub = rospy.Publisher('cleaning_status', String, queue_size=10)
+        self.cleaning_status_pub = rospy.Publisher('cleaning_status', String, queue_size=10)
 
         ##
         # self.waypoints_marker_pub = rospy.Publisher('waypoints_marker', Marker    , queue_size=1)
@@ -168,22 +168,6 @@ class TaskExecutive(MoveGroupClient, PointHeadClient):
         '''
         ##
         contaminated_obj_dict = ast.literal_eval(msg.data)
-        # Reverse the dictionary
-        # reversed_dict = {value: key for key, value in contaminated_obj_dict.items()}
-        # print("Original Dictionary:")
-        print(contaminated_obj_dict)
-        # print()
-
-        # Sorting the dictionary by the centroid values in descending order
-        # sorted_data = dict(sorted(contaminated_obj_dict.keys(), key=lambda item: item['centroid'], reverse=True))
-
-
-
-        # # Reconstruct the dictionary from the sorted items
-        # # sorted_dict = dict(sorted_items)
-
-        # print("Sorted Dictionary:")
-        # print(sorted_items)
 
         waypoints = []
         marker_array = MarkerArray()
@@ -236,6 +220,8 @@ class TaskExecutive(MoveGroupClient, PointHeadClient):
 
         gripper_pose_stamped = PoseStamped()
         gripper_pose_stamped.header.frame_id = "base_link"
+
+        self.cleaning_status_pub.publish('cleaning')
         for waypoint in waypoints:    
             ##
             gripper_pose_stamped.header.stamp = rospy.Time.now()
@@ -269,6 +255,7 @@ class TaskExecutive(MoveGroupClient, PointHeadClient):
 
         
         self.init_pose()
+        self.cleaning_status_pub.publish('complete')
         
 
 
