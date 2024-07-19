@@ -2,23 +2,18 @@
 
 ## Import modules
 import rospy
-import sys
 import os
-import signal
-import tf
 import json
 import ast
 import actionlib
-import moveit_commander 
-import moveit_msgs.msg
+
 
 ## Import message types and other python libraries
 from moveit_python import MoveGroupInterface, PlanningSceneInterface
 from moveit_msgs.msg import MoveItErrorCodes
-from geometry_msgs.msg import  Pose, Point, Quaternion, PoseArray, PoseStamped
+from geometry_msgs.msg import  Pose, Point, Quaternion, PoseStamped
 from std_msgs.msg import String, Header
 from visualization_msgs.msg import Marker, MarkerArray
-from robot_controllers_msgs.msg import QueryControllerStatesAction, QueryControllerStatesGoal, ControllerState
 from control_msgs.msg import FollowJointTrajectoryAction, FollowJointTrajectoryGoal
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
   
