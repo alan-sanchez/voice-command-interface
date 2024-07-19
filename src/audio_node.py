@@ -17,7 +17,7 @@ from std_msgs.msg import String
 from halo import Halo
 from geometry_msgs.msg import Pose
 
-class BarTask():
+class AudioNode():
     """
     A class that handles audio communication using ROS and OpenAI API.
     """
@@ -30,7 +30,8 @@ class BarTask():
         self.object_map_sub = rospy.Subscriber('object_map', String, self.callback, queue_size=10)
         
         ## Initialize publisher
-        self.waypoint_pub = rospy.Publisher('waypoint', Pose, queue_size=1)
+        # self.waypoint_pub = rospy.Publisher('waypoint', Pose, queue_size=1)
+        self.contaminated_obj_pub = rospy.Publisher('contaminated_objects', String, queue_size=10)
         
         ## Specify the relative and audio directory paths
         self.relative_path = 'catkin_ws/src/voice_command_interface/'
@@ -56,7 +57,15 @@ class BarTask():
         self.default_time = 10
 
         ## hard code line number
-        self.line_number = 32
+        self.line_number = 34
+
+        ##
+        # self.object_map_dict = {"lime juice": {"centroid": [0.603, 0.031, 1.048], "status": "contaminated"}, 
+        #                         "red solo cup": {"centroid": [0.621, 0.202, 0.863], "status": "contaminated"}, 
+        #                         "squirt soda": {"centroid": [0.628, -0.124, 0.955], "status": "clean"}
+        #                         }
+
+        self.label_lsit =[]
 
         ##
         self.spinner = Halo(text='Computing response', spinner='dots')
@@ -69,6 +78,7 @@ class BarTask():
         '''
         
         '''
+        print('made it here')
         self.object_map_dict = json.loads(msg.data)
         self.label_list = list(self.object_map_dict.keys())
 
@@ -91,7 +101,7 @@ class BarTask():
         """
         # Record audio from the microphone
         self.myrecording = sd.rec(int(self.default_time * self.fs), samplerate=self.fs, channels=2)
-        input('Recording... Press Enter to stop.')  # Wait for the user to press Enter to stop the recording
+        input('Recording... Press Enter to stop.\n')  # Wait for the user to press Enter to stop the recording
         sd.stop()
         
         self.spinner.start()
@@ -109,6 +119,7 @@ class BarTask():
         
         ## 
         return ast.literal_eval(response)
+        # return False
     
     
     def get_task(self, dict_response):
@@ -118,6 +129,7 @@ class BarTask():
         ## Assuming the dictionary length size is 1
         key_list = list(dict_response.keys())
         value_list = list(dict_response.values())
+        
        
         ## Greeting condition
         if key_list[0] == 'A':
@@ -126,9 +138,28 @@ class BarTask():
 
         ## Cocktail list condition 
         elif key_list[0] == 'B':
-           
-           self.spinner.stop()
-           print(value_list)
+            self.spinner.stop()
+
+            if len(value_list[0]) != 0:
+            
+                ## Flatten the dictionary into a list of tuples
+                flattened_list = [(key, value) for key, value in self.object_map_dict.items()]
+
+                ## Filter out items with "clean" status
+                filtered_list = [item for item in flattened_list if item[1]['status'] != "clean"]
+
+                # # Sort the list by y coordinate (index 1 of centroid) in descending order
+                # # and then by x coordinate (index 0 of centroid) in ascending order
+                # sorted_list = sorted(filtered_list, key=lambda item: (item[1]['centroid'][1], item[1]['centroid'][0]))
+
+                # Reconstruct the dictionary from the filtered list
+                filtered_dict = {key: value for key, value in filtered_list}
+
+                # Publish the dictionary as a String
+                self.json_data = json.dumps(filtered_dict)
+                self.contaminated_obj_pub.publish(self.json_data)
+
+                print(filtered_dict)     
 
         ## Disinfection condition
         # elif key_list[0] == 'C':
@@ -159,7 +190,7 @@ if __name__ == '__main__':
     rospy.init_node('audio_communication', argv=sys.argv)
 
     ## Create an instance of the AudioCommunication class
-    obj = BarTask()
+    obj = AudioNode()
 
     # rospy.spin()
     while True:

@@ -28,7 +28,7 @@ class Cluster:
         self.max_x = 0
         self.max_y = 0
         self.indices = 0
-        self.object_height_buffer = 0.1
+        self.object_height_buffer = 0.2 #in meters
         
 
     def compute_regions(self, data):
@@ -98,11 +98,19 @@ class Cluster:
 
         for id in self.region_dict:
             points_array = np.array(self.region_dict[id]["points"])
-            x_centroid, y_centroid, _ = np.mean(points_array, axis=0)
-            z_values = [point[2] for point in self.region_dict[id]["points"]]
-            max_z_value = max(z_values)
+            if points_array.size > 0:  # Check if the array is not empty
+                x_centroid, y_centroid, _ = np.mean(points_array, axis=0)
+                z_values = [point[2] for point in self.region_dict[id]["points"]]
+                max_z_value = max(z_values)
+                self.region_dict[id]["centroid"] = [round(x_centroid, 3), round(y_centroid, 3), round(abs(max_z_value) + self.object_height_buffer, 3)]
+            else:
+                # Handle the case where points_array is empty
+                self.region_dict[id]["centroid"] = [None, None, None]
+            # x_centroid, y_centroid, _ = np.mean(points_array, axis=0)
+            # z_values = [point[2] for point in self.region_dict[id]["points"]]
+            # max_z_value = max(z_values)
         
-            self.region_dict[id]["centroid"] = [round(x_centroid,3), round(y_centroid,3), round(abs(max_z_value) + self.object_height_buffer,3)]
+            # self.region_dict[id]["centroid"] = [round(x_centroid,3), round(y_centroid,3), round(abs(max_z_value) + self.object_height_buffer,3)]
 
         return self.region_dict
 

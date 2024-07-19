@@ -63,6 +63,7 @@ class ObjectSegmentation():
             self.updated_map_prompt = file.read()
         
         ## Subscribe and synchronize YOLO results, PointCloud2, and depth image messages
+        self.cleaning_status_sub = rospy.Subscriber('cleaning_status', String, self.cleaning_status_callback)
         self.pcl2_sub         = message_filters.Subscriber("/head_camera/depth_downsample/points", PointCloud2)
         self.raw_image_sub    = message_filters.Subscriber("/head_camera/rgb/image_raw", Image)
         sync = message_filters.ApproximateTimeSynchronizer([self.pcl2_sub,
@@ -79,17 +80,14 @@ class ObjectSegmentation():
         
         ## Initialize variables and constants
         self.pcl2_msg = None
-        self.table_height_buffer = 0.035 # in meters
+        self.table_height_buffer = 0.04 # in meters
+        self.table_height = 0.5 # in meters
         self.max_table_reach = 0.8 # in meters
         self.object_map_dict = {}
-        # self.status_dict = {'clean':[], 'contaminated':[]}
         self.threshold = .05 # in meters
-
-        ## Start flag for initial run
-        self.start = True
-
-        ## JSON data to be published
-        self.json_data = None
+        self.start = True # Start flag for initial run
+        self.json_data = None # JSON data to be published
+        self.cleaning_status = "complete"
        
         ## Initialize a timer to periodically update locations
         self.timer = rospy.Timer(rospy.Duration(2), self.timer_callback)
@@ -108,7 +106,7 @@ class ObjectSegmentation():
         if self.start == True:
             rospy.sleep(5)
             self.start = False 
-        else:
+        elif self.start == False and self.cleaning_status == 'complete':
             self.location_updater()
 
 
@@ -123,6 +121,15 @@ class ObjectSegmentation():
         '''
         self.pcl2_msg = pcl2_msg
         self.img_msg  = img_msg
+
+    def cleaning_status_callback(self, str_msg):
+        if str_msg.data == "cleaning":
+            rospy.loginfo("Cleaning items. Not updating map")
+        elif str_msg.data == "complete":
+            rospy.loginfo("Cleaning is complete. ")
+            dict = self.segment_image(visual_debugger=False)
+            self.label_images(dict)
+        self.cleaning_status = str_msg.data
 
 
     def segment_image(self, visual_debugger=False):
@@ -165,13 +172,13 @@ class ObjectSegmentation():
         arr = np.column_stack((x,y,z))
         plane1 = pyrsc.Plane()
         best_eq, _ = plane1.fit(arr, 0.01)
-        table_height = abs(best_eq[3]) + self.table_height_buffer
+        self.table_height = round(abs(best_eq[3]) + self.table_height_buffer,2)
         # print(best_eq)
 
         ## Extract coordinates of items on the table
         object_pcl_coordinates = []        
         for i in range(len(z)):
-            if (z[i] > table_height) and (x[i] < self.max_table_reach):
+            if (z[i] > self.table_height) and (x[i] < self.max_table_reach):
                 x_plot.append(x[i]) # used for visual debugger
                 y_plot.append(y[i]) # used for visual debugger
                 object_pcl_coordinates.append([float(x[i]), float(y[i]), float(z[i])])
@@ -220,7 +227,8 @@ class ObjectSegmentation():
             label = self.vtt_obj.viz_to_text(img=raw_image, bbox=regions_dict[id]["bbox"], prompt_filename = self.label_prompt_filename)
             self.object_map_dict[label] = {
                 'centroid': regions_dict[id]["centroid"],
-                'status': 'clean'
+                'status': 'clean',
+                'table_height': self.table_height
                 }
 
         if self.start:
@@ -229,71 +237,68 @@ class ObjectSegmentation():
         self.json_data = json.dumps(self.object_map_dict)
         self.object_map_pub.publish(self.json_data)
 
-        print(self.object_map_dict)
+        print(self.object_map_dict.keys())
 
 
     def location_updater(self):
         '''
         Updates the locations of objects based on the segmented image data and the current object locations.
         '''
-
-        ## Segment the current image to get data and create a copy of the current object location dictionary
-        current_data = self.segment_image()
-        copy_obj_map = self.object_map_dict.copy()
-        
-        ## Iterate over each object in the current location dictionary
-        for label, data in self.object_map_dict.items():
-            centroid = data['centroid']
-            for key in current_data:
-                ## Calculate the Euclidean distance between the current object and the new detected object
-                euclidean_dist = np.linalg.norm(np.array(centroid) - np.array(current_data[key]['centroid']))
-                
-                ## If the distance is less than the threshold, consider it the same object
-                if euclidean_dist < self.threshold:
-                    current_data.pop(key) # Remove the detected object from current data
-                    copy_obj_map.pop(label) # Remove the label from the copy of the object location dictionary
-                    break
-
-        ## If there is exactly one object that moved, update its location in the map
-        if len(copy_obj_map) == 1 and len(current_data) == 1:
-            label, = copy_obj_map
-            print(f"The {label} has moved. updating map")
-            id = next(iter(current_data))
-            self.object_map_dict[label]['centroid'] = current_data[id]["centroid"].copy()
-            self.object_map_dict[label]['status'] = 'contaminated'
-
-            ## Publish the dictionary as a String
-            self.json_data = json.dumps(self.object_map_dict)
-            self.object_map_pub.publish(self.json_data)
-            # print(self.object_map_dict)
-            # print()
-
-        ## If there are multiple objects that moved, use the VLM to help with updating their locations in the map
-        elif len(copy_obj_map) > 1 and len(current_data) > 1: 
-            keys = copy_obj_map.keys()
-            labels = list(keys)
-            updated_prompt = self.updated_map_prompt + str(labels)
-
-            ## Convert the image message to an OpenCV image format using the bridge 
-            raw_image = self.bridge.imgmsg_to_cv2(self.img_msg, desired_encoding='bgr8')
-                
-            for id in current_data:
-                ## Use the vision-to-text object to label the detected object based on the updated prompt
-                label = self.vtt_obj.viz_to_text(img=raw_image, prompt=updated_prompt, bbox=current_data[id]["bbox"])
-                
-                if label in labels:
-                    self.object_map_dict[label]['centroid'] = current_data[id]["centroid"].copy()
-                    self.object_map_dict[label]['status'] = 'contaminated'
-                else:
-                    print(label)
-
-            ## Publish the dictionary as a String
-            self.json_data = json.dumps(self.object_map_dict)
-            self.object_map_pub.publish(self.json_data)
+        if self.cleaning_status != "cleaning":
+            ## Segment the current image to get data and create a copy of the current object location dictionary
+            current_data = self.segment_image()
+            copy_obj_map = self.object_map_dict.copy()
             
-            print(f"The {labels} have moved. Updating map")
-            # print(self.object_map_dict)
-            # print()
+            ## Iterate over each object in the current location dictionary
+            for label, data in self.object_map_dict.items():
+                centroid = data['centroid']
+                for key in current_data:
+                    ## Calculate the Euclidean distance between the current object and the new detected object
+                    euclidean_dist = np.linalg.norm(np.array(centroid) - np.array(current_data[key]['centroid']))
+                    
+                    ## If the distance is less than the threshold, consider it the same object
+                    if euclidean_dist < self.threshold:
+                        current_data.pop(key) # Remove the detected object from current data
+                        copy_obj_map.pop(label) # Remove the label from the copy of the object location dictionary
+                        break
+
+            ## If there is exactly one object that moved, update its location in the map
+            if len(copy_obj_map) == 1 and len(current_data) == 1:
+                label, = copy_obj_map
+                print(f"The {label} has moved. updating map")
+                id = next(iter(current_data))
+                self.object_map_dict[label]['centroid'] = current_data[id]["centroid"].copy()
+                self.object_map_dict[label]['status'] = 'contaminated'
+
+                ## Publish the dictionary as a String
+                self.json_data = json.dumps(self.object_map_dict)
+                self.object_map_pub.publish(self.json_data)
+
+            ## If there are multiple objects that moved, use the VLM to help with updating their locations in the map
+            elif len(copy_obj_map) > 1 and len(current_data) > 1: 
+                keys = copy_obj_map.keys()
+                labels = list(keys)
+                updated_prompt = self.updated_map_prompt + str(labels)
+
+                ## Convert the image message to an OpenCV image format using the bridge 
+                raw_image = self.bridge.imgmsg_to_cv2(self.img_msg, desired_encoding='bgr8')
+                    
+                for id in current_data:
+                    ## Use the vision-to-text object to label the detected object based on the updated prompt
+                    label = self.vtt_obj.viz_to_text(img=raw_image, prompt=updated_prompt, bbox=current_data[id]["bbox"])
+                    
+                    if label in labels:
+                        self.object_map_dict[label]['centroid'] = current_data[id]["centroid"].copy()
+                        self.object_map_dict[label]['status'] = 'contaminated'
+                    else:
+                        print(label)
+
+                ## Publish the dictionary as a String
+                self.json_data = json.dumps(self.object_map_dict)
+                self.object_map_pub.publish(self.json_data)
+                
+                print(f"The {labels} have moved. Updating map")
+ 
         
             
                 
