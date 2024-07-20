@@ -7,6 +7,7 @@ import rospy
 import message_filters
 import os
 import tf
+import ast
 import json
 
 import numpy as np
@@ -43,10 +44,10 @@ class ObjectSegmentation():
         '''
         Constructor method for initializing the ObjectSegmentation class.
         '''
-        ## Initialize objects for bounding box computation, clustering, and vision-to-text conversion
+        ## Initialize objects for bounding box computation, clustering, text-to-text, and vision-to-text conversion
         self.bbox_obj = BBox()
         self.cluster_obj = Cluster(pixel_size=0.005, dilation_size=10)
-        self.vtt_obj = VisionToText()            
+        self.vtt_obj = VisionToText()   
 
         ## Define the filename for the prompt that instructs the VLM how to label objects
         self.label_prompt_filename = 'label_prompt.txt'
@@ -57,10 +58,17 @@ class ObjectSegmentation():
         ## Specify the relative path for the txt files that handle the updated maps
         self.relative_path = 'catkin_ws/src/voice_command_interface/'
         updated_map_dir = os.path.join(os.environ['HOME'], self.relative_path, 'prompts/', 'updated_map.txt')
+        label_list_dir = os.path.join(os.environ['HOME'], self.relative_path, 'prompts/', self.label_prompt_filename)
 
         ## Read the updated map prompt from a file
         with open(updated_map_dir, 'r') as file:
             self.updated_map_prompt = file.read()
+
+        ## 
+        with open(label_list_dir, 'r') as file:
+            lines = file.readlines()
+            last_line = lines[-1].strip()
+            self.list_of_items = ast.literal_eval(last_line)
         
         ## Subscribe and synchronize YOLO results, PointCloud2, and depth image messages
         self.cleaning_status_sub = rospy.Subscriber('cleaning_status', String, self.cleaning_status_callback)
@@ -88,14 +96,14 @@ class ObjectSegmentation():
         self.start = True # Start flag for initial run
         self.json_data = None # JSON data to be published
         self.cleaning_status = "complete"
-       
+        
         ## Initialize a timer to periodically update locations
-        self.timer = rospy.Timer(rospy.Duration(2), self.timer_callback)
+        self.timer = rospy.Timer(rospy.Duration(2.5), self.timer_callback)
 
         ## Log initialization notifier
         rospy.loginfo('{}: is booting up.'.format(self.__class__.__name__))
 
-    
+
     def timer_callback(self, event):
         '''
         Callback function for the timer event.
@@ -123,6 +131,12 @@ class ObjectSegmentation():
         self.img_msg  = img_msg
 
     def cleaning_status_callback(self, str_msg):
+        '''
+        Callback function that notifies the status of the cleaning robot.
+
+        Parameters:
+        str_msg (String): a string message that states if the robot is cleaning or completed it's task.
+        '''
         if str_msg.data == "cleaning":
             rospy.loginfo("Cleaning items. Not updating map")
         elif str_msg.data == "complete":
@@ -230,6 +244,11 @@ class ObjectSegmentation():
                 'status': 'clean',
                 'table_height': self.table_height
                 }
+            
+            if label in self.list_of_items:
+                self.object_map_dict[label]['in_repo'] = True
+            else:
+                self.object_map_dict[label]['in_repo'] = False
 
         if self.start:
             rospy.loginfo("{}: is up and running!".format(self.__class__.__name__))
@@ -237,7 +256,7 @@ class ObjectSegmentation():
         self.json_data = json.dumps(self.object_map_dict)
         self.object_map_pub.publish(self.json_data)
 
-        print(self.object_map_dict.keys())
+        print(self.object_map_dict)
 
 
     def location_updater(self):
@@ -299,8 +318,7 @@ class ObjectSegmentation():
                 
                 print(f"The {labels} have moved. Updating map")
  
-        
-            
+          
                 
 if __name__=="__main__":
     ## Initialize irradiance_vectors node
@@ -312,18 +330,4 @@ if __name__=="__main__":
     rospy.sleep(1.5)
     dict = obj.segment_image(visual_debugger=True)
     obj.label_images(dict)
-    
     rospy.spin()
-
-    # print("\n\nEnter 1 for Fetch to segment what it sees. \nElse enter anything or ctrl+c to exit the node\n")
-    # control_selection = input("Choose an option: ")
-
-    # ## sub loop controlling add a movement feature
-    # if control_selection == "1":
-    #     dict = obj.segment_image(visual_debugger=True)
-    #     obj.label_images(dict)
-
-    #     # # #
-    #     while True:
-    #         rospy.sleep(5)
-    #         obj.location_updater()
