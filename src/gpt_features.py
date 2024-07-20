@@ -42,7 +42,7 @@ class SpeechToText(OpenAIBase):
         '''
         super().__init__()
 
-    def convert_to_text(self, filename="intro"):
+    def convert_to_text(self, filename="intro.wav"):
         '''
         Converts text to speech and saves it to a file.
         Link:https://platform.openai.com/docs/guides/speech-to-text
@@ -252,6 +252,19 @@ class TextToText(OpenAIBase):
         
         ## Extract and return the generated response content
         return response.choices[0].message.content
+    
+
+    def append_text_from_file(self, content="Text", destination_filename="label_prompt.txt"):
+        """
+        Reads content from the source file and appends it to the end of the destination file.
+        """
+        destination_file_dir = os.path.join(os.environ['HOME'], self.relative_path, 'prompts', destination_filename)
+        
+        # Open the destination file in append mode and write the content to it
+        with open(destination_file_dir, 'a') as dest:
+            dest.write(content)
+
+
 
 if __name__ == "__main__":
     stt = SpeechToText()
@@ -269,12 +282,14 @@ if __name__ == "__main__":
         control_selection = input("Choose an option: ")
 
         if control_selection == "1":
-            text = stt.convert_to_text("intro")
+            text = stt.convert_to_text("intro.wav")
             print(f"Converted Text: {text}")
 
         elif control_selection == "2":
-            tts.convert_to_speech("Hello, Skinny Human.", "intro.wav")
-            tts.playback("intro")
+            content = "There are no contaminated objects"
+            filename = "no_contamination.wav"
+            tts.convert_to_speech(text=content, filename=filename)
+            tts.playback(filename)
 
         elif control_selection == "3":
             response_text = vtt.viz_to_text()
