@@ -218,7 +218,7 @@ class TextToText(OpenAIBase):
         super().__init__()
         
 
-    def text_to_text(self, system_filename=None, user_prompt='Hello!'):
+    def text_to_text(self, system_filename=None, user_content='Hello!'):
         '''
         Generates a response from the OpenAI API based on a system prompt and a user prompt.
         Link: https://platform.openai.com/docs/guides/text-generation/chat-completions-api
@@ -246,7 +246,7 @@ class TextToText(OpenAIBase):
             model="gpt-4o",
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
+                {"role": "user", "content": user_content},
             ]
             )
         
