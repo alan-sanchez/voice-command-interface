@@ -119,7 +119,7 @@ class TaskExecutive(MoveGroupClient, PointHeadClient):
         self.set_pan_tilt()
 
         ## Initialize subsciber
-        self.contaminated_obj_sub = rospy.Subscriber('contaminated_objects',String, self.waypoint_generator)
+        self.known_obj_sub = rospy.Subscriber('known_object_dict',String, self.waypoint_generator)
 
         self.cleaning_status_pub = rospy.Publisher('cleaning_status', String, queue_size=10)
 
