@@ -28,13 +28,16 @@ class ArmControl:
         - self: The self reference.
         '''
         ## Intialize subscriber
-        self.unknown_object_sub = rospy.Subscriber('unknown_object_data', String, self.label_callback)
-        self.human_demo_status_sub = rospy.Subscriber('human_demo_status', String, self.operations_callback)
+        self.unknown_object_sub    = rospy.Subscriber('unknown_object_label', String, self.label_callback)
+        self.human_demo_status_sub = rospy.Subscriber('human_demo_status',    String, self.operations_callback)
        
         # Contrct the path to save recorded movements
         relative_path = 'catkin_ws/src/voice_command_interface/tool_paths'
         self.full_path = os.path.join(os.environ['HOME'], relative_path)
         self.file = None
+
+        ## Instantiate a `TranformListener` object
+        self.listener = tf.TransformListener()
             
         ## Action client for querying controller states
         controller_states = "/query_controller_states"
@@ -50,33 +53,28 @@ class ArmControl:
         ## Initialize a timer to periodically update locations
         self.timer = rospy.Timer(rospy.Duration(1), self.timer_callback)
 
+        self.demo_status = None
+
+        ## Log initialization notifier
+        rospy.loginfo('{}: is ready.'.format(self.__class__.__name__))
 
     def label_callback(self, msg):
         '''
         
         '''
         # self.unknown_item_dict = json.loads(msg.data)#ast.literal_eval(msg.data)
-        self.unknown_item_dict = ast.literal_eval(msg.data)
-        # print(self.unknown_item_dict, type(self.unknown_item_dict))
-        # print(test)
-        # print(msg.data)
-
-        for key, value in unknown_item_dict.items():
-        # Convert key-value pair to JSON string for publishing
-            message = json.dumps({key: value})
-            rospy.loginfo(message)
-            pub.publish(message)
-            rate.sleep()
+        self.label = msg.data
+       
     
     def operations_callback(self,msg):
-        
+        print(msg.data)
         if msg.data == 'relax':
             self.relax_arm()
         else:
             self.demo_status = msg.data
 
     
-    def timer_callback(self):
+    def timer_callback(self, event):
         pose_list = []
         while self.demo_status == 'start':
             pose = self.ee_pose()
@@ -84,10 +82,14 @@ class ArmControl:
                 pose_list.append(pose)
             rospy.sleep(1)
 
-        
+        if len(pose_list) > 1:
+            ## Construct the full file path
+            file_path = os.path.join(self.full_path, str(self.label) + '.json')
 
-        
-
+            ## 
+            json_object = json.dumps(pose_list, indent=4)
+            with open(file_path, 'w') as outfile:
+                outfile.write(json_object)
 
     def relax_arm(self):
         '''
@@ -101,14 +103,14 @@ class ArmControl:
         goal = QueryControllerStatesGoal()
 
         ## Loop over the list of controllers that should be in gravity compensation mode
-        for controller in self._gravity_comp_controllers:
+        for controller in self.gravity_comp_controllers:
             state = ControllerState()
             state.name = controller
             state.state = state.RUNNING
             goal.updates.append(state)
 
         ## Loop over the list of controllers that should not be in gravity compensation mode
-        for controller in self._non_gravity_comp_controllers:
+        for controller in self.non_gravity_comp_controllers:
             state = ControllerState()
             state.name = controller
             state.state = state.STOPPED
