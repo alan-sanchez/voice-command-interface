@@ -64,20 +64,23 @@ class ObjectSegmentation():
         with open(updated_map_dir, 'r') as file:
             self.updated_map_prompt = file.read()
 
-        ## 
+        ## Pull the lits of items the robot knows how to disinfect
         with open(label_list_dir, 'r') as file:
             lines = file.readlines()
             last_line = lines[-1].strip()
             self.list_of_items = ast.literal_eval(last_line)
         
-        ## Subscribe and synchronize YOLO results, PointCloud2, and depth image messages
-        self.cleaning_status_sub = rospy.Subscriber('cleaning_status', String, self.cleaning_status_callback)
-        self.pcl2_sub         = message_filters.Subscriber("/head_camera/depth_downsample/points", PointCloud2)
-        self.raw_image_sub    = message_filters.Subscriber("/head_camera/rgb/image_raw", Image)
-        sync = message_filters.ApproximateTimeSynchronizer([self.pcl2_sub,
-                                                            self.raw_image_sub],
-                                                            queue_size=1,
-                                                            slop=1.2)
+        ## Initialize subscribers
+        self.cleaning_status_sub   = rospy.Subscriber('cleaning_status',      String, self.cleaning_status_callback)
+        self.human_demo_status_sub = rospy.Subscriber('human_demo_status',    String, self.human_demo_callback)
+        self.unknown_obj_sub       = rospy.Subscriber('unknown_object_label', String, self.in_repo_callback)
+
+        self.pcl2_sub      = message_filters.Subscriber("/head_camera/depth_downsample/points", PointCloud2)
+        self.raw_image_sub = message_filters.Subscriber("/head_camera/rgb/image_raw", Image)
+        sync               = message_filters.ApproximateTimeSynchronizer([self.pcl2_sub,
+                                                                          self.raw_image_sub],
+                                                                          queue_size=1,
+                                                                          slop=1.2)
         sync.registerCallback(self.callback_sync) 
 
         ## Initialize TransformListener class
@@ -102,6 +105,17 @@ class ObjectSegmentation():
 
         ## Log initialization notifier
         rospy.loginfo('{}: is booting up.'.format(self.__class__.__name__))
+
+
+    def in_repo_callback(self,str_msg):
+        '''
+        Callback function for changine the 'in_repo' status for unknown objects.
+
+        Parameters:
+        - str_msg (String): The message containing the label of the unknown object.
+        '''
+        self.object_map_dict[str_msg.data]['in_repo']=True
+
 
 
     def timer_callback(self, event):
@@ -130,6 +144,7 @@ class ObjectSegmentation():
         self.pcl2_msg = pcl2_msg
         self.img_msg  = img_msg
 
+
     def cleaning_status_callback(self, str_msg):
         '''
         Callback function that notifies the status of the cleaning robot.
@@ -138,12 +153,34 @@ class ObjectSegmentation():
         str_msg (String): a string message that states if the robot is cleaning or completed it's task.
         '''
         if str_msg.data == "cleaning":
+            self.cleaning_status = str_msg.data
             rospy.loginfo("Cleaning items. Not updating map")
+        
         elif str_msg.data == "complete":
+            self.cleaning_status= str_msg.data
             rospy.loginfo("Cleaning is complete. ")
-            dict = self.segment_image(visual_debugger=False)
-            self.label_images(dict)
-        self.cleaning_status = str_msg.data
+            self.location_updater()
+
+            # Iterate through the dictionary and update 'contaminated' status to 'clean'
+            for key, value in self.object_map_dict.items():
+                if value['status'] == 'contaminated':
+                    value['status'] = 'clean'
+
+            ## Publish updated dictionary
+            self.json_data = json.dumps(self.object_map_dict)
+            self.object_map_pub.publish(self.json_data)
+    
+
+    def human_demo_callback(self, str_msg):
+        '''
+        Callback function for handling human demonstration status.
+
+        Parameters:
+        - str_msg (String): The message containing the status of the human demonstration.
+        '''
+        if str_msg.data == 'pause':
+            self.cleaning_status = 'cleaning'
+            rospy.loginfo("Arm is being guided. Not updating map")
 
 
     def segment_image(self, visual_debugger=False):
@@ -237,7 +274,10 @@ class ObjectSegmentation():
         ## Convert the image message to an OpenCV image format using the bridge 
         raw_image = self.bridge.imgmsg_to_cv2(self.img_msg, desired_encoding='bgr8')
 
+        ## Iterate over each region in the regions dictionary
         for id in regions_dict:
+
+            ## Use VisionToText object to generate a label for the region based on the bounding box
             label = self.vtt_obj.viz_to_text(img=raw_image, bbox=regions_dict[id]["bbox"], prompt_filename = self.label_prompt_filename)
             self.object_map_dict[label] = {
                 'centroid': regions_dict[id]["centroid"],
@@ -245,18 +285,21 @@ class ObjectSegmentation():
                 'table_height': self.table_height
                 }
             
+            ## Check if the labeled object is in the list of known items
             if label in self.list_of_items:
                 self.object_map_dict[label]['in_repo'] = True
             else:
                 self.object_map_dict[label]['in_repo'] = False
 
+        ## Log the status if it's the initial run
         if self.start:
             rospy.loginfo("{}: is up and running!".format(self.__class__.__name__))
-                
+
+        ## Convert the object map dictionary to JSON format and publish it      
         self.json_data = json.dumps(self.object_map_dict)
         self.object_map_pub.publish(self.json_data)
 
-        print(self.object_map_dict)
+        print(self.object_map_dict.keys())
 
 
     def location_updater(self):
@@ -284,7 +327,7 @@ class ObjectSegmentation():
             ## If there is exactly one object that moved, update its location in the map
             if len(copy_obj_map) == 1 and len(current_data) == 1:
                 label, = copy_obj_map
-                print(f"The {label} has moved. updating map")
+                rospy.loginfo(f"The {label} has moved. updating map")
                 id = next(iter(current_data))
                 self.object_map_dict[label]['centroid'] = current_data[id]["centroid"].copy()
                 self.object_map_dict[label]['status'] = 'contaminated'
@@ -316,7 +359,7 @@ class ObjectSegmentation():
                 self.json_data = json.dumps(self.object_map_dict)
                 self.object_map_pub.publish(self.json_data)
                 
-                print(f"The {labels} have moved. Updating map")
+                rospy.loginfo(f"The {labels} have moved. Updating map")
  
           
                 
@@ -327,7 +370,14 @@ if __name__=="__main__":
     ## Instantiate the `CoordinateEstimation` class
     obj = ObjectSegmentation()
     
+    ## Allow some time for initialization
     rospy.sleep(1.5)
+
+    ## Segment the image and get the regions dictionary
     dict = obj.segment_image(visual_debugger=True)
+
+    ## Label the segmented images
     obj.label_images(dict)
+
+    ## Keep the node running until it is shut down
     rospy.spin()
