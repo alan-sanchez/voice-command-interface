@@ -76,7 +76,7 @@ class TextToSpeech(OpenAIBase):
         Constructor method for initializing inherited class.
         '''
         super().__init__()
-
+    
     def convert_to_speech(self, text='Hello World!', filename="speech.wav"):
         """
         Converts text to speech and saves it to a file.
@@ -112,6 +112,11 @@ class TextToSpeech(OpenAIBase):
             status = sd.wait()
         else:
             print(f"File {file_dir} does not exist.")
+    
+    def del_speech_file(self, filename):
+        ## Construct the full file path for saving the audio file and save the response
+        file_dir = os.path.join(os.environ['HOME'], self.relative_path, 'audio_files', filename)   
+        os.remove(file_dir)     
 
 
 
@@ -286,8 +291,8 @@ if __name__ == "__main__":
             print(f"Converted Text: {text}")
 
         elif control_selection == "2":
-            content = "There are no contaminated objects"
-            filename = "no_contamination.wav"
+            content = "I will now begin disinfecting all of the contaminated objects."
+            filename = "after_demo.wav"
             tts.convert_to_speech(text=content, filename=filename)
             tts.playback(filename)
 
