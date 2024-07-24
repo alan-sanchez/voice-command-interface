@@ -4,5 +4,7 @@ You already know how to disinfect a list of items. If any of label names in your
 return the item name. If not, then use your knowledge to provide an approriate label. Also, if you observe alcohol, make sure you 
 mention the type of alcohol if possible in the label. The same goes for other non-alcoholic drinks.
 
+All the labels need to be lower-case!  
+
 The following is the label list of items you know how to disinfect:
 ['red solo cup', 'squirt soda', 'tequila bottle', 'salt shaker', 'lime juice']
