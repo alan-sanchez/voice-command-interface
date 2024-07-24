@@ -189,10 +189,10 @@ class ObjectSegmentation():
 
         Parameters:
         - self: The self reference.
-        - visual_debugger (bool): Boolean used for the visual debugging process.
+        - visual_debugger (Bool): Boolean used for the visual debugging process.
 
         Returns:
-        - regions_dict (dict): Dictionary containing regions with bounding boxes for each detected object. 
+        - regions_dict (dictionary): Dictionary containing regions with bounding boxes for each detected object. 
         '''
         ## Initialize a new point cloud message type to store position data.
         temp_cloud = PointCloud()
