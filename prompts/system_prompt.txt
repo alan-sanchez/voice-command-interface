@@ -32,7 +32,11 @@ If the dictionary has an item or items that are both 'contaminated' and 'in_repo
 For example, given the provided example dicionary, then the response should be:
 {'C': ['rum bottle']}
 
+condition 3:
+If the dictionary has no items that are contaminated, then respond with a the following dictionary:
+{'D': []}
+
 Remember that you only respond with a dictionary, Not with other text that explains your reasoning! 
 
 Here is the actual dictionary you will be working with: 
-{"squirt soda": {"centroid": [0.512, 0.28, 1.129], "status": "clean", "table_height": 0.78, "in_repo": true}, "red solo cup": {"centroid": [0.61, 0.118, 1.083], "status": "clean", "table_height": 0.78, "in_repo": true}, "rum bottle": {"centroid": [0.656, -0.088, 1.22], "status": "contaminated", "table_height": 0.78, "in_repo": false}}
+{"red solo cup": {"centroid": [0.586, -0.096, 1.086], "status": "clean", "table_height": 0.77, "in_repo": true}, "squirt soda": {"centroid": [0.573, 0.257, 1.173], "status": "clean", "table_height": 0.77, "in_repo": true}, "rum bottle": {"centroid": [0.68, 0.082, 1.223], "status": "contaminated", "table_height": 0.77, "in_repo": false}}
