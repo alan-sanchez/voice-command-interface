@@ -5,12 +5,14 @@ You will be provided with a Python dictionary where each key represents an item,
 is contaminated or clean, "table_height" gives the height of the table on which the item is located, and "in_repo" indicates whether the item is in the repository. 
 Here's an example:
 
+<example_dictionary>
 {
     'tequila bottle':{'centroid': [0.603, 0.031, 1.048],  'status': 'clean',        'table_height': 0.78, 'in_repo':true}, 
     'rum bottle':    {'centroid': [0.663, -0.095, 1.22],  'status': 'contaminated', 'table_height': 0.78, 'in_repo':false},
     'red solo cup':  {'centroid': [0.621, 0.202, 0.863],  'status': 'clean',        'table_height': 0.78, 'in_repo':true}, 
     'squirt soda':   {'centroid': [0.628, -0.124, 0.955], 'status': 'contaminated', 'table_height': 0.78, 'in_repo':true}
 }
+</example_dictionary>
 
 Your task is to respond with the correct key and value based on the question or statement the bartender says. You will only be told 1 statement or question. 
 Here are examples of how to respond to the bartender:
@@ -24,12 +26,12 @@ If the human operator says they are done, then respond with a dicationary with t
 
 condition 1:
 If the dictionary has an item or items that are both 'contaminated' and 'in_repo':true, then respond with a list of those items. 
-For example, given the provided example dictionary, then the response should be:
+For example, given the provided <example dictionary>, then the response should be:
 {'B': ['squirt soda']}
 
 condition 2:
-If the dictionary has an item or items that are both 'contaminated' and 'in_repo':False, then respond with a list of those items. 
-For example, given the provided example dicionary, then the response should be:
+If the dictionary has an item that is both 'contaminated' and 'in_repo':False, then this trumps conditions 1.  
+For example, given the provided <example dicionary>, the response should be:
 {'C': ['rum bottle']}
 
 condition 3:
@@ -39,4 +41,4 @@ If the dictionary has no items that are contaminated, then respond with a the fo
 Remember that you only respond with a dictionary, Not with other text that explains your reasoning! 
 
 Here is the actual dictionary you will be working with: 
-{"red solo cup": {"centroid": [0.586, -0.096, 1.086], "status": "clean", "table_height": 0.77, "in_repo": true}, "squirt soda": {"centroid": [0.573, 0.257, 1.173], "status": "clean", "table_height": 0.77, "in_repo": true}, "rum bottle": {"centroid": [0.68, 0.082, 1.223], "status": "contaminated", "table_height": 0.77, "in_repo": false}}
+{"squirt soda": {"centroid": [0.498, 0.283, 1.126], "status": "clean", "table_height": 0.78, "in_repo": true}, "rum bottle": {"centroid": [0.7, 0.142, 1.223], "status": "clean", "table_height": 0.78, "in_repo": true}}
