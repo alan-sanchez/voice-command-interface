@@ -78,7 +78,7 @@ class Record:
         
         ## Action client for querying controller states
         controller_states = "/query_controller_states"
-        self._controller_client = actionlib.SimpleActionClient(controller_states,QueryControllerStatesAction)
+        self._controller_client = actionlib.SimpleActionClient(controller_states, QueryControllerStatesAction)
         self._controller_client.wait_for_server()
 
         ## Define controllers for gravity compensation
@@ -98,7 +98,7 @@ class Record:
         - vel (Float): Arm velocity scaling factor.
         """
         ## List of joint values of init position
-        pose =[.15, 1.41, 0.30, -0.22, -2.25, -1.56, 1.80, -0.37,]
+        pose =[.27, 1.41, 0.30, -0.22, -2.25, -1.56, 1.80, -0.37,]
         while not rospy.is_shutdown():
             result = self.client.moveToJointPosition(self.joints,
                                                      pose,

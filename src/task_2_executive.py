@@ -119,35 +119,22 @@ class TaskExecutive(MoveGroupClient, PointHeadClient):
         MoveGroupClient.__init__(self)
         PointHeadClient.__init__(self)
 
-        #
+        ## Command robot to start at initial arm, torso, and head position
         self.init_pose()
         self.set_pan_tilt()
 
-        ## Initialize subsciber
-        self.contaminated_obj_sub = rospy.Subscriber('contaminated_objects',String, self.waypoint_generator)
-
+        ## Initialize subscibers
+        self.known_obj_sub     = rospy.Subscriber('known_object_dict', String, self.waypoint_generator)
+        self.init_pose_cmd_sub = rospy.Subscriber('human_demo_status', String, self.init_pose_callback)
+        
+        ## Initial publisher
         self.cleaning_status_pub = rospy.Publisher('cleaning_status', String, queue_size=10)
-
-        ##
-        # self.waypoints_marker_pub = rospy.Publisher('waypoints_marker', Marker    , queue_size=1)
-        self.waypoints_marker_pub = rospy.Publisher('waypoints', MarkerArray, queue_size=1)
+       
         # Setup header
         self.header = Header()
         self.header.frame_id = "/base_link"
         self.header.stamp = rospy.Time.now()
     
-        # Initialize waypoint_markers and all of the other feature values
-        self.waypoints_marker = Marker()
-        self.waypoints_marker.header = self.header
-        self.waypoints_marker.type = Marker.ARROW
-        self.waypoints_marker.scale.x = 0.03
-        self.waypoints_marker.scale.y = 0.01
-        self.waypoints_marker.scale.z = 0.005
-        self.waypoints_marker.color.a = 1
-        self.waypoints_marker.color.r = 0
-        self.waypoints_marker.color.g = 0
-        self.waypoints_marker.color.b = 1.0
-
         ## Initialize dictionary
         self.contaminated_obj_dict = {}
 
@@ -160,6 +147,13 @@ class TaskExecutive(MoveGroupClient, PointHeadClient):
         ## Log initialization notifier
         rospy.loginfo('{}: is ready.'.format(self.__class__.__name__))
 
+    def init_pose_callback(self, str_msg):
+        '''
+
+        '''
+        print('made it here')
+        if str_msg.data == 'init_pose':
+            self.init_pose()
 
 
     def waypoint_generator(self,msg):
@@ -191,28 +185,6 @@ class TaskExecutive(MoveGroupClient, PointHeadClient):
                                     )
                     waypoints.append(new_pose)
 
-                    # Create and append a marker for visualization
-                    marker = Marker()
-                    marker.header.frame_id = "base_link"
-                    marker.header.stamp = rospy.Time.now()
-                    marker.ns = "waypoints"
-                    marker.id = i
-                    marker.type = Marker.SPHERE
-                    marker.action = Marker.ADD
-                    marker.pose = new_pose
-                    marker.scale.x = 0.01
-                    marker.scale.y = 0.01
-                    marker.scale.z = 0.01
-                    marker.color.a = 1.0
-                    marker.color.r = 1.0
-                    marker.color.g = 0.0
-                    marker.color.b = 0.0
-                    marker_array.markers.append(marker)
-
-
-        self.waypoints_marker_pub.publish(marker_array)
-        # print(shift_z)
-        # rospy.loginfo("Published waypoints markers")
         self.move_along_waypoints(waypoints)
 
 
@@ -248,11 +220,6 @@ class TaskExecutive(MoveGroupClient, PointHeadClient):
                                  self.move_group.get_move_action().get_state())
             else:
                 rospy.logerr("MoveIt! failure no result returned.")
-
-        # This stops all arm movement goals
-        # It should be called when a program is exiting so movement stops
-        # self.move_group.get_move_action().cancel_all_goals()
-
         
         self.init_pose()
         self.cleaning_status_pub.publish('complete')
