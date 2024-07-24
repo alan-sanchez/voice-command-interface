@@ -26,18 +26,24 @@ class AudioNode():
         Initialize the AudioNode class with ROS subscribers, publishers, and OpenAI API key and client. 
         """
         ## Initialize subscriber
-        self.object_map_sub = rospy.Subscriber('object_map', String, self.callback, queue_size=10)
+        self.object_map_sub      = rospy.Subscriber('object_map',     String, self.callback)
+        self.cleaning_status_sub = rospy.Subscriber('cleaning_status', String, self.status_callback)
         
         ## Initialize publisher
         self.known_obj_pub         = rospy.Publisher('known_object_dict',    String, queue_size=10)
         self.unknown_obj_pub       = rospy.Publisher('unknown_object_label', String, queue_size=10)
-        self.cleaning_status_pub   = rospy.Publisher('cleaning_status',      String, queue_size=10)
         self.human_demo_status_pub = rospy.Publisher('human_demo_status',    String, queue_size=10)
         
         ## Specify the relative, prompt, and audio directory paths
         self.relative_path = 'catkin_ws/src/voice_command_interface/'
         self.system_filename = 'system_prompt.txt'
         self.system_filename_dir = os.path.join(os.environ['HOME'], self.relative_path, 'prompts', self.system_filename)
+        self.label_filename_dir = os.path.join(os.environ['HOME'], self.relative_path, 'prompts/label_prompt.txt')
+
+        ## Read the file contents
+        with open(self.label_filename_dir, 'r') as file:
+            lines = file.readlines()
+        self.label_list = ast.literal_eval(lines[-1].strip())
 
         ## Get the OpenAI API key from environment variables
         self.key = os.environ.get("openai_key")
@@ -54,22 +60,51 @@ class AudioNode():
         self.fs = 44100  # Sampling rate in Hz
         self.default_time = 10 # Duration in seconds
 
-        ## hard code line number
-        self.line_number = 38
-
-        # Initialize object map dictionary and label list
+        ## Initialize object map dictionary and label list
         # self.object_map_dict = {'rum bottle':    {'centroid': [0.663, -0.095, 1.22],  'status': 'contaminated', 'table_height': 0.78, 'in_repo':False},
         #                         'red solo cup':  {'centroid': [0.621, 0.202, 0.863],  'status': 'clean',        'table_height': 0.78, 'in_repo':True}, 
         #                         'squirt soda':   {'centroid': [0.628, -0.124, 0.955], 'status': 'contaminated', 'table_height': 0.78, 'in_repo':True}
         #                         }
-        self.label_list =[]
 
         ## Initialize Halo spinner for indicating processing
         self.spinner = Halo(text='Computing response', spinner='dots')
 
         ## Log initialization notifier
         rospy.loginfo('{}: is ready.'.format(self.__class__.__name__))
+
+
+    def status_callback(self, str_msg):
+        '''
+        Callback function for handling the status of the cleaning robot. If status is complete, notify the user
+
+        Parameters:
+        - str_msg (String): A string message indicating the status of the cleaning process.
         
+        '''
+        if str_msg.data == "complete":
+            self.tts.playback("complete.wav") 
+
+
+    def append_text_to_file(self, filename, text):
+        '''
+        Append text to a file after removing the last line.
+
+        Parameters:
+        - filename (String): The path to the file.
+        - text (String): The text to append.
+        '''
+        ## Read the file contents
+        with open(filename, 'r') as file:
+            lines = file.readlines()
+
+        ##Read the file contents
+        lines = lines[:-1]
+        lines.append(text)
+
+        ## Write the modified contents back to the file
+        with open(filename, 'w') as file:
+            file.writelines(lines)
+
 
     def callback(self, msg):
         '''
@@ -77,24 +112,14 @@ class AudioNode():
         and modifies the system prompt file with the received message.
 
         Parameters:
-        - msg (str): dictionary of object_map in a string format.     
+        - msg (String): dictionary of object_map in a string format.     
         '''
         print('made it here')
         ## Load the object map dictionary from the received message
         self.object_map_dict = json.loads(msg.data)
-        self.label_list = list(self.object_map_dict.keys())
 
-        ## Read the file contents
-        with open(self.system_filename_dir, 'r') as file:
-            lines = file.readlines()
-
-        ## Delete the specified line
-        del lines[self.line_number-1]
-        lines.insert(self.line_number - 1, msg.data + '\n')
-
-        ## Write the modified contents back to the file
-        with open(self.system_filename_dir, 'w') as file:
-            file.writelines(lines)
+        ## Append the message data to the system prompt file
+        self.append_text_to_file(filename=self.system_filename_dir, text=msg.data)
 
 
     def record_audio(self, filename=None):
@@ -108,8 +133,8 @@ class AudioNode():
         Returns:
         -Response(dictionary): reponse of GPT in a dictionary format. 
         """
-        ##
-        input("\nPress Enter to start recording")
+        ## Prompt the user to start recording
+        input("Press Enter to start recording\n")
         
         ## Record audio from the microphone
         self.myrecording = sd.rec(int(self.default_time * self.fs), samplerate=self.fs, channels=2)
@@ -127,7 +152,7 @@ class AudioNode():
         transcript = self.stt.convert_to_text(temp_filename)
         os.remove(temp_filename)
 
-        ## 
+        ## Get the response from OpenAI API
         response = self.ttt.text_to_text(system_filename=filename, user_content=transcript)
         
         ## Return the response as a dictionary
@@ -150,24 +175,28 @@ class AudioNode():
         ## Extract the values (labels) for the contaminated objects
         value_list = list(dict_response.values())
 
+        #####################
         ## Greeting condition
+        #####################
         if key_list[0] == 'A':
             self.spinner.stop()
             self.tts.playback('intro.wav') # Audio was created before the developement of this script
 
+        ##########################
         ## Known objects condition
+        ##########################
         elif key_list[0] == 'B':
             self.spinner.stop()
-            if len(filtered_dict) != 0:
-                # Publish the dictionary as a String
-                self.contaminated_obj_pub.publish(str(filtered_dict))
-                self.tts.playback('disinfection_notification.wav') # Audio was created before the developement of this script
-            else:
-                ## Use playback to notify user that no items were moved
-                self.tts.playback('no_contamination.wav') # Audio was created before the developement of this script
+            self.tts.playback('disinfection_notification.wav') # Audio was created before the developement of this script
+            rospy.sleep(.3)
+            self.known_obj_pub.publish(str(filtered_dict))
                 
-        # Unknown objects condition
+        ############################
+        ## Unknown objects condition
+        ############################
         elif key_list[0] == 'C':
+            self.spinner.stop()
+            
             ## Pull lables of unknown objects
             unkown_obj_names = [item for sublist in value_list for item in sublist]
 
@@ -175,46 +204,73 @@ class AudioNode():
             message = f"{', '.join(unkown_obj_names)} is not in my repository of known items. Would you like to show me how by guiding my arm? Or would you rather I disinfect items that are in my repository?"
 
             ## Convert message to speech and play back for human operator
-            self.tts.convert_to_speech(message, 'unknown.wav')
-            self.spinner.stop()
-            self.tts.playback('unknown.wav')
+            self.tts.convert_to_speech(message, 'temp_speech.wav')
+            self.tts.playback('temp_speech.wav')
+            self.tts.del_speech_file('temp_speech.wav')
 
             ## Record response of human operator
             response = self.record_audio(filename='new_trajectory.txt')
             self.spinner.stop()
             
-            ## 
+            ## Process the response from the human operator
             for key, value in response.items():
                 if value == 1:
-                    ##
-                    self.cleaning_status_pub.publish("cleaning")
+                    self.human_demo_status_pub.publish('pause')
+                    
+                    ## Process each unkown object label
+                    for label in unkown_obj_names:
+                        self.unknown_obj_pub.publish(label)
 
-                    input("\nPress Enter to relax arm")
-        
-                    self.human_demo_status_pub.publish('relax')
+                        ## Generate and play back message for duiing the arm
+                        message = f"Okay, show me how to disifect the {label} "
+                        self.tts.convert_to_speech(message, 'temp_speech.wav')
+                        self.tts.playback('temp_speech.wav')
 
-                    input("\n Press Enter to start recording")
-
-                    self.human_demo_status_pub.publish('start')
-
-                    input("\n Press Enter to stop recording")
-
-                    self.human_demo_status_pub.publish('finish')
-
-                    input("\n Press Enter to move to Init Pose")
-
-                    self.human_demo_status_pub.publish('init_pose')
-                    self.cleaning_status_pub.publish("complete")
+                        ## Publish relaxation status for the arm
+                        self.human_demo_status_pub.publish('relax')
+                        self.tts.playback('relax_arm.wav')
+                        
+                        ## Prompt the user to start and stop recording arm trajectory
+                        input("\n Press Enter to start recording arm trajectory")
+                        self.human_demo_status_pub.publish('start')
+                        input("\n Press Enter to stop recording the guided path")                        
+                        self.tts.playback('saving_traj.wav')
+                        self.human_demo_status_pub.publish('finish')
+                        
+                        ## Return the arm to the initial pose
+                        rospy.sleep(1)
+                        self.human_demo_status_pub.publish('init_pose') 
+                        rospy.sleep(6)
+                        
+                        ## Update the labe list with the new object
+                        self.label_list.append(label)
+                        self.append_text_to_file(filename=self.label_filename_dir, text = str(self.label_list))
+                    
+                    ## Notify the user after the demonstration
+                    print(filtered_dict)
+                    self.tts.playback('after_demo.wav')
+                    rospy.sleep(1)
+                    self.known_obj_pub.publish(str(filtered_dict))
+                    
                 else: 
-                    ##
+                    ## Filter known items and publish the dictionary
                     known_item_dict = {key: value for key, value in filtered_dict.items() if value['in_repo'] == True}
-                    self.contaminated_obj_pub.publish(str(known_item_dict))
-            print(response)
+                    self.known_obj_pub.publish(str(known_item_dict))
+
+
+        ##################################
+        ## All items are cleaned condition
+        ##################################
+        elif key_list[0] == 'D':
+            self.spinner.stop()
+            ## Use playback to notify user that no items were moved
+            self.tts.playback('no_contamination.wav') # Audio was created before the developement of this script
             
+        
 
 if __name__ == '__main__':
-    ## Initialize the ROS node with the name 'audio_communication'
-    rospy.init_node('audio_communication', argv=sys.argv)
+    ## Initialize the ROS node with the name 'audio_node'
+    rospy.init_node('audio_node', argv=sys.argv)
 
     ## Create an instance of the AudioCommunication class
     obj = AudioNode()
@@ -222,5 +278,5 @@ if __name__ == '__main__':
     # rospy.spin()
     while True:
         dict_response = obj.record_audio()
-        task = obj.get_task(dict_response)
         # print(dict_response)
+        task = obj.get_task(dict_response)
