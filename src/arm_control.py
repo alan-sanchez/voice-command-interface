@@ -23,15 +23,12 @@ class ArmControl:
     def __init__(self):
         '''
         Initializes the robot arm control, setting up MoveIt interfaces and other necessary components.
-
-        Parameters:
-        - self: The self reference.
         '''
         ## Intialize subscriber
         self.unknown_object_sub    = rospy.Subscriber('unknown_object_label', String, self.label_callback)
         self.human_demo_status_sub = rospy.Subscriber('human_demo_status',    String, self.operations_callback)
        
-        # Contrct the path to save recorded movements
+        ## Contrct the path to save recorded movements
         relative_path = 'catkin_ws/src/voice_command_interface/tool_paths'
         self.full_path = os.path.join(os.environ['HOME'], relative_path)
         self.file = None
@@ -53,6 +50,7 @@ class ArmControl:
         ## Initialize a timer to periodically update locations
         self.timer = rospy.Timer(rospy.Duration(1), self.timer_callback)
 
+        ## Initialize demo status
         self.demo_status = None
 
         ## Log initialization notifier
@@ -60,13 +58,25 @@ class ArmControl:
 
     def label_callback(self, msg):
         '''
-        
+        Callback function for handling incoming labels for unknown objects.
+
+        Parameters:
+        - self: The self reference.
+        - msg (String): Message containing labels of the unknown objects. 
         '''
+        print(msg.data)
         # self.unknown_item_dict = json.loads(msg.data)#ast.literal_eval(msg.data)
         self.label = msg.data
        
     
     def operations_callback(self,msg):
+        '''
+        Callback function for handling operations based on the human demonstration status.
+
+        Parameters:
+        - self: The self reference.
+        - msg (String): Status of the human demo.
+        '''
         print(msg.data)
         if msg.data == 'relax':
             self.relax_arm()
@@ -75,29 +85,36 @@ class ArmControl:
 
     
     def timer_callback(self, event):
+        '''
+        Timer callback function to periodically record end-effector positions.
+
+        Parameters:
+        - self: The self reference. 
+        - event: The event timer.
+        '''
         pose_list = []
+        
+        ## Continuously record poses while the demo status is 'start'
         while self.demo_status == 'start':
             pose = self.ee_pose()
             if any(value != 0 for value in pose):
                 pose_list.append(pose)
             rospy.sleep(1)
 
+        ## Save recorded poses to a file if there are any
         if len(pose_list) > 1:
             ## Construct the full file path
             file_path = os.path.join(self.full_path, str(self.label) + '.json')
 
-            ## 
+            ## Save the poses to a JSON file
             json_object = json.dumps(pose_list, indent=4)
             with open(file_path, 'w') as outfile:
                 outfile.write(json_object)
 
+
     def relax_arm(self):
         '''
-        Turns on gravity compensation controller and turns
-        off other controllers
-
-        Parameters:
-        - self: The self reference.
+        Turns on gravity compensation controller and turns off other controllers.
         '''
         ## Initialize a goal for the QueryControllerStates action,
         goal = QueryControllerStatesGoal()
@@ -120,43 +137,11 @@ class ArmControl:
         self.controller_client.send_goal(goal)
 
 
-    def record_ee_trajectory(self):
-        '''
-        A function that records the human-guided motions
-
-        Parameters:
-        - self: The self reference.
-        '''
-        pose_arr = []
-        print("\nRecording movement...\n")
-        print("\nPress ctrl+c to stop recording and save to file\n")
-        while not interrupted:
-            joints_arr = self.ee_pose()
-            # Check if all joint values are not zero before appending
-            if any(value != 0 for value in joints_arr):
-                pose_arr.append(joints_arr)
-            rospy.sleep(1)
-        
-        file_name = raw_input('\nname your movement file: ')
-
-        ## Construct the full file path
-        file_path = os.path.join(self.full_path, file_name + '.json')
-
-        ## 
-        json_object = json.dumps(pose_arr, indent=4)
-        with open(file_path, 'w') as outfile:
-            outfile.write(json_object)
-        
-        ## Reset interrupted flag
-        interrupted = False
-
-
     def ee_pose(self):
         '''
         Function thatfinds the pose of the `gripper_link` relative to the `base_link` frame.
-        :param self: The self reference.
-
-        :return [trans, rot]: The pose message type.
+        Return:
+        - trans + rot (list): The translation and rotation of the end-effector.
         '''
         while not rospy.is_shutdown():
             try:
@@ -164,7 +149,6 @@ class ArmControl:
                 trans = [round(p,3) for p in trans]
                 rot = [round(r,2) for r in rot]
                 return trans + rot
-
             except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
                 pass
 
@@ -176,5 +160,5 @@ if __name__ == '__main__':
     ## Instantiate the `ArmControl()` object
     obj = ArmControl()
 
-    ## 
+    ## Keep the node running
     rospy.spin()
