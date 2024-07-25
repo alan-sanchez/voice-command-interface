@@ -1,14 +1,11 @@
 <launch>
-  <arg name="resolution"    default="0.025"/>
-
-
     <!-- Launch move group -->
     <include file="$(find uv_project)/launch/move_group.launch" />
 
-    <!-- Launch primesense (head camera) octomap settings -->
-    <!-- <include file="$(find uv_project)/launch/octomap_primesense_setup.launch">
-        <arg name="resolution" value="$(arg resolution)" />
-    </include> -->
- 
+    <!-- Start the task executive node -->
+    <node pkg="voice_command_interface" type="task_2_executive.py" name="task_2_executive" output="screen"/>
+
+    <!-- Start the arm controller node -->
+    <node pkg="voice_command_interface" type="arm_control.py" name="arm_control" output="screen"/>
     
 </launch>
