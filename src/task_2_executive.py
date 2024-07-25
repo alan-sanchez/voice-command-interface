@@ -15,7 +15,7 @@ import moveit_msgs.msg
 ## Import message types and other python libraries
 from moveit_python import MoveGroupInterface, PlanningSceneInterface
 from moveit_msgs.msg import MoveItErrorCodes
-from geometry_msgs.msg import  Pose, Point, Quaternion, , PoseStamped
+from geometry_msgs.msg import  Pose, Point, Quaternion, PoseStamped
 from std_msgs.msg import String, Header
 from robot_controllers_msgs.msg import QueryControllerStatesAction, QueryControllerStatesGoal, ControllerState
 from control_msgs.msg import FollowJointTrajectoryAction, FollowJointTrajectoryGoal
