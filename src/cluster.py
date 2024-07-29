@@ -65,7 +65,7 @@ class Cluster:
         # axs[1].imshow(image)
         # axs[1].title.set_text(f'After dilation and erosion ({self.dilation_size})')
 
-        n_labels, self.labels, self.stats, centroids  = cv.connectedComponentsWithStats(image, 8, cv.CV_8U)
+        n_labels, self.labels, self.stats, _  = cv.connectedComponentsWithStats(image, 8, cv.CV_8U)
         # print(f'{n_labels} total regions')
     
         ## Remove components that are too big (tabletop) or too small (noise)
@@ -99,10 +99,10 @@ class Cluster:
         for id in self.region_dict:
             points_array = np.array(self.region_dict[id]["points"])
             if points_array.size > 0:  # Check if the array is not empty
-                x_centroid, y_centroid, _ = np.mean(points_array, axis=0)
+                x_centroid, y_centroid, z_centroid = np.mean(points_array, axis=0)
                 z_values = [point[2] for point in self.region_dict[id]["points"]]
                 max_z_value = max(z_values)
-                self.region_dict[id]["centroid"] = [round(x_centroid, 3), round(y_centroid, 3), round(abs(max_z_value) + self.object_height_buffer, 3)]
+                self.region_dict[id]["centroid"] = [round(x_centroid, 3), round(y_centroid, 3), round(z_centroid,3)] #abs(max_z_value) + self.object_height_buffer, 3)]
             else:
                 # Handle the case where points_array is empty
                 self.region_dict[id]["centroid"] = [None, None, None]
