@@ -71,6 +71,10 @@ class BarTask():
         ## Log initialization notifier
         rospy.loginfo('{}: is ready.'.format(self.__class__.__name__))
 
+    def begin_dialouge(self):
+        '''
+        '''
+        self.tts.playback("hello.wav")
 
     def append_text_to_file(self, filename, text):
         '''
@@ -118,14 +122,15 @@ class BarTask():
         self.append_text_to_file(filename=self.cocktail_filename_dir, text= msg.data)
         contaminated_objects = {key: value for key, value in self.object_map_dict.items() if value['status'] != 'clean'} 
         
-        # print(contaminated_objects)
+        print(contaminated_objects)
 
         if len(self.ingredient_list) != 0:
-            rospy.sleep(3)
+            rospy.sleep(2)
             all_objs_used = all(obj in contaminated_objects for obj in self.ingredient_list)
             # print(all_objs_used)
         
             if all_objs_used and self.flag == True:
+                print("made it here")
                 message = "Are you finished making your " + self.drink
                 self.flag = False
                 self.tts.convert_to_speech(text=message, filename=self.temp_filename)
@@ -168,7 +173,6 @@ class BarTask():
         return ast.literal_eval(response)
 
 
-
     def get_task(self, dict_response):
         '''
         Process the response dictionary and execute tasks based on the keys.
@@ -190,7 +194,7 @@ class BarTask():
         ############################
         if key_list[0] == 'A':
             self.spinner.stop()
-            self.tts.playback('ack_bartender.wav') # Audio was created before the developement of this script
+            self.tts.playback('begin_mixing.wav') # Audio was created before the developement of this script
             self.ingredient_list= dict_response['A']['ingredients']
             self.drink = dict_response['A']['drink']
 
@@ -214,7 +218,7 @@ class BarTask():
             unkown_obj_names = [item for sublist in value_list for item in sublist]
 
             ## Create question for human operator
-            message = f"{', '.join(unkown_obj_names)} is not in my repository of known items. Would you like to show me how by guiding my arm? Or would you rather I disinfect items that are in my repository?"
+            message = f"{', '.join(unkown_obj_names)} is not in my repository of known items. Would you like to show me how by guiding my arm?"# Or would you rather I disinfect items that are in my repository?"
 
             ## Convert message to speech and play back for human operator
             self.tts.convert_to_speech(message, self.temp_filename)
@@ -245,6 +249,7 @@ class BarTask():
                         
                         ## Prompt the user to start and stop recording arm trajectory
                         input("\n Press Enter to start recording arm trajectory")
+                        self.tts.playback('recording_path_notification.wav')
                         self.human_demo_status_pub.publish('start')
                         input("\n Press Enter to stop recording the guided path")                        
                         self.tts.playback('saving_traj.wav')
@@ -266,9 +271,13 @@ class BarTask():
                     self.known_obj_pub.publish(str(filtered_dict))
                     
                 else: 
+                    
                     ## Filter known items and publish the dictionary
                     known_item_dict = {key: value for key, value in filtered_dict.items() if value['in_repo'] == True}
                     self.known_obj_pub.publish(str(known_item_dict))
+
+        else:
+            self.spinner.stop()
 
         self.flag = True
         # self.tts.del_speech_file(filename=self.temp_filename)    
@@ -281,8 +290,14 @@ if __name__ == '__main__':
     ## Create an instance of the AudioCommunication class
     obj = BarTask()
     
-    
+    ## 
+    input("press enter to start operation")
+    flag = True
     while True:
+        if flag == True:
+            obj.begin_dialouge()
+            flag = False
+
         dict_response = obj.record_audio('cocktail_prompt.txt')
         print(dict_response)
         task = obj.get_task(dict_response)
