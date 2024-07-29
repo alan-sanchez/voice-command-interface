@@ -46,7 +46,7 @@ class ObjectSegmentation():
         '''
         ## Initialize objects for bounding box computation, clustering, text-to-text, and vision-to-text conversion
         self.bbox_obj = BBox()
-        self.cluster_obj = Cluster(pixel_size=0.005, dilation_size=10)
+        self.cluster_obj = Cluster(pixel_size=0.005, dilation_size=8)
         self.vtt_obj = VisionToText()   
 
         ## Define the filename for the prompt that instructs the VLM how to label objects
@@ -58,17 +58,17 @@ class ObjectSegmentation():
         ## Specify the relative path for the txt files that handle the updated maps
         self.relative_path = 'catkin_ws/src/voice_command_interface/'
         updated_map_dir = os.path.join(os.environ['HOME'], self.relative_path, 'prompts/', 'updated_map.txt')
-        label_list_dir = os.path.join(os.environ['HOME'], self.relative_path, 'prompts/', self.label_prompt_filename)
+        label_prompt_dir = os.path.join(os.environ['HOME'], self.relative_path, 'prompts/', self.label_prompt_filename)
 
         ## Read the updated map prompt from a file
         with open(updated_map_dir, 'r') as file:
             self.updated_map_prompt = file.read()
 
         ## Pull the lits of items the robot knows how to disinfect
-        with open(label_list_dir, 'r') as file:
+        with open(label_prompt_dir, 'r') as file:
             lines = file.readlines()
             last_line = lines[-1].strip()
-            self.list_of_items = ast.literal_eval(last_line)
+            self.repo_of_items = ast.literal_eval(last_line)
         
         ## Initialize subscribers
         self.cleaning_status_sub   = rospy.Subscriber('cleaning_status',      String, self.cleaning_status_callback)
@@ -95,13 +95,13 @@ class ObjectSegmentation():
         self.table_height = 0.5 # in meters
         self.max_table_reach = 0.8 # in meters
         self.object_map_dict = {}
-        self.threshold = .05 # in meters
+        self.moved_threshold = .05 # in meters
         self.start = True # Start flag for initial run
         self.json_data = None # JSON data to be published
         self.cleaning_status = "complete"
         
         ## Initialize a timer to periodically update locations
-        self.timer = rospy.Timer(rospy.Duration(2.5), self.timer_callback)
+        self.timer = rospy.Timer(rospy.Duration(1), self.timer_callback)
 
         ## Log initialization notifier
         rospy.loginfo('{}: is booting up.'.format(self.__class__.__name__))
@@ -286,7 +286,7 @@ class ObjectSegmentation():
                 }
             
             ## Check if the labeled object is in the list of known items
-            if label in self.list_of_items:
+            if label in self.repo_of_items:
                 self.object_map_dict[label]['in_repo'] = True
             else:
                 self.object_map_dict[label]['in_repo'] = False
@@ -319,7 +319,7 @@ class ObjectSegmentation():
                     euclidean_dist = np.linalg.norm(np.array(centroid) - np.array(current_data[key]['centroid']))
                     
                     ## If the distance is less than the threshold, consider it the same object
-                    if euclidean_dist < self.threshold:
+                    if euclidean_dist < self.moved_threshold:
                         current_data.pop(key) # Remove the detected object from current data
                         copy_obj_map.pop(label) # Remove the label from the copy of the object location dictionary
                         break
