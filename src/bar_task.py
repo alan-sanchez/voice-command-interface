@@ -76,6 +76,32 @@ class BarTask():
         '''
         self.tts.playback("hello.wav")
 
+    
+    def create_incremented_directory(self):
+        '''
+        
+        '''
+        # Check if the base directory exists
+        if not os.path.exists(self.base_dir):
+            os.makedirs(self.base_dir)
+            incremented_dir = os.path.join(self.base_dir, "data_0")
+            os.makedirs(incremented_dir)
+            return incremented_dir
+
+        # Find the highest incremented directory name
+        existing_dirs = [d for d in os.listdir(self.base_dir) if os.path.isdir(os.path.join(self.base_dir, d)) and d.startswith("data_")]
+        existing_indices = [int(d.split('_')[1]) for d in existing_dirs if d.split('_')[1].isdigit()]
+
+        if existing_indices:
+            new_index = max(existing_indices) + 1
+        else:
+            new_index = 0
+
+        incremented_dir = os.path.join(self.base_dir, f"data_{new_index}")
+        os.makedirs(incremented_dir)
+        return incremented_dir
+    
+    
     def append_text_to_file(self, filename, text):
         '''
         Append text to a file after removing the last line.
@@ -164,6 +190,7 @@ class BarTask():
         
         ## Use whisper speech to text (stt) converter
         transcript = self.stt.convert_to_text(temp_filename)
+        print(transcript)
         os.remove(temp_filename)
 
         ## Get the response from OpenAI API
