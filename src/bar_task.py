@@ -5,6 +5,8 @@ import sys
 import os
 import json
 import ast
+import time
+import csv
 
 import sounddevice as sd
 import soundfile as sf
@@ -28,6 +30,7 @@ class BarTask():
         ## Initialize subscriber
         self.object_map_sub      = rospy.Subscriber('object_map',      String, self.map_update_callback)
         self.cleaning_status_sub = rospy.Subscriber('cleaning_status', String, self.status_callback)
+        self.moved_obj_sub       = rospy.Subscriber('moved_object',    String, self.moved_obj_callback)
         
         ## Initialize publisher
         self.known_obj_pub         = rospy.Publisher('known_object_dict',    String, queue_size=10)
@@ -38,7 +41,8 @@ class BarTask():
         self.relative_path = 'catkin_ws/src/voice_command_interface/'
         self.cocktail_filename_dir = os.path.join(os.environ['HOME'], self.relative_path, 'prompts/cocktail_prompt.txt') 
         self.repo_filename_dir = os.path.join(os.environ['HOME'], self.relative_path, 'prompts/label_prompt.txt')
-
+        self.base_dir = os.path.join(os.environ['HOME'], self.relative_path, 'data') 
+        self.transcript_dir = os.path.join(os.environ['HOME'], self.relative_path, 'audio_files/audio_transcripts')
         ## Read the file contents
         with open(self.repo_filename_dir, 'r') as file:
             lines = file.readlines()
@@ -65,18 +69,39 @@ class BarTask():
         self.flag = True
         self.temp_filename = 'temp_speech.wav'
 
+        ## Initialze time tracker for saved text
+        self.start_time = None
+        self.start_flag = True
+
+        ## Create folder to store data
+        self.save_dir = self.create_incremented_directory()
+
         ## Initialize Halo spinner for indicating processing
         self.spinner = Halo(text='Computing response', spinner='dots')
 
         ## Log initialization notifier
         rospy.loginfo('{}: is ready.'.format(self.__class__.__name__))
 
-    def begin_dialouge(self):
+        self.pull_transcript('after_demo.txt')
+        
+    def pull_transcript(self,filename):
         '''
+        
         '''
-        self.tts.playback("hello.wav")
+        file_dir = os.path.join(self.transcript_dir,filename)
+        ## Read the file contents
+        with open(file_dir, 'r') as file:
+            fetch_transcript = file.read()
+        return fetch_transcript
 
-    
+
+    def moved_obj_callback(self, str_msg):
+        '''
+        
+        '''
+        self.save_info(str_msg.data, 'moved')
+
+
     def create_incremented_directory(self):
         '''
         
@@ -101,7 +126,56 @@ class BarTask():
         os.makedirs(incremented_dir)
         return incremented_dir
     
-    
+    def save_info(self, content, process):
+        '''
+        Save the transcript to a file in the save directory.
+
+        Parameters:
+        - transcript (String): The transcript text to save.
+        '''
+        
+
+        if self.start_time == None:
+            elapsed_time = "N/A"
+        else:
+            elapsed_time = str(round(time.time() - self.start_time,2))
+        
+        ##
+        save_path = os.path.join(self.save_dir, 'transcript.csv')        
+
+        ## Define the header row
+        header = ["Timestamp", "Fetch's transcript", "Transcribed audio", "Fetch's response to transcribed audio", "Drink", "Ingredients", "Moved object", "Map"]
+
+        ##
+        row = [elapsed_time, "", "", "", "", "", "", ""]
+
+        ##
+        if process == 'fetch':
+            row[1]=content
+        elif process == 'whisper':
+            row[2] = content
+        elif process == 'response':
+            row[3] = content.replace('\n', ' ')
+        elif process == 'drink':
+            row[4] = content
+        elif process == 'ingredients':
+            row[5] = content
+        elif process == "moved":
+            row[6] = content
+        elif process == 'map':
+            row[7] = content
+
+        ## Append the row to the CSV file
+        with open(save_path, mode='a', newline='') as file:
+            writer = csv.writer(file)
+
+            ## Write the header row if the file is new/empty
+            if os.path.getsize(save_path) == 0:
+                writer.writerow(header)
+            
+            ##
+            writer.writerow(row)
+
     def append_text_to_file(self, filename, text):
         '''
         Append text to a file after removing the last line.
@@ -131,7 +205,9 @@ class BarTask():
         - str_msg (String): A string message indicating the status of the cleaning process.
         '''
         if str_msg.data == "complete":
-            self.tts.playback("complete.wav") 
+            self.tts.playback("complete.wav")
+            fetch_transcript = self.pull_transcript('Complete.txt')
+            self.save_info(fetch_transcript, 'fetch')
 
 
     def map_update_callback(self, msg):
@@ -144,11 +220,14 @@ class BarTask():
         '''        
         print()
         ## Load the object map dictionary from the received message
+        self.save_info(msg.data, 'map')
         self.object_map_dict = json.loads(msg.data)
         self.append_text_to_file(filename=self.cocktail_filename_dir, text= msg.data)
         contaminated_objects = {key: value for key, value in self.object_map_dict.items() if value['status'] != 'clean'} 
         
         print(contaminated_objects)
+
+        self.save_info(contaminated_objects.keys(), 'contaminated')
 
         if len(self.ingredient_list) != 0:
             rospy.sleep(2)
@@ -161,6 +240,8 @@ class BarTask():
                 self.flag = False
                 self.tts.convert_to_speech(text=message, filename=self.temp_filename)
                 self.tts.playback(self.temp_filename)
+                self.save_info(message, 'fetch')
+
 
     def record_audio(self, filename=None):
         """
@@ -173,6 +254,13 @@ class BarTask():
         Returns:
         -Response(dictionary): reponse of GPT in a dictionary format. 
         """
+        if self.start_flag == True:
+            self.start_time = time.time()
+            self.tts.playback("hello.wav")
+            fetch_transcript = self.pull_transcript('hello.txt')
+            self.save_info(fetch_transcript, 'fetch')
+            self.start_flag = False
+        
         ## Prompt the user to start recording
         input("Press Enter to start recording\n")
         
@@ -190,11 +278,16 @@ class BarTask():
         
         ## Use whisper speech to text (stt) converter
         transcript = self.stt.convert_to_text(temp_filename)
-        print(transcript)
+        # print(transcript)
+        self.save_info(transcript, 'whisper')
         os.remove(temp_filename)
 
         ## Get the response from OpenAI API
         response = self.ttt.text_to_text(system_filename=filename, user_content=transcript)
+
+        response = response.replace("```python ", "").replace("```", "").strip()
+        ##
+        self.save_info(response, 'response')
         
         ## Return the response which is either a dictionary or list
         return ast.literal_eval(response)
@@ -222,9 +315,14 @@ class BarTask():
         if key_list[0] == 'A':
             self.spinner.stop()
             self.tts.playback('begin_mixing.wav') # Audio was created before the developement of this script
-            self.ingredient_list= dict_response['A']['ingredients']
+            fetch_transcript = self.pull_transcript('begin_mixing.txt')
+            self.save_info(fetch_transcript, 'fetch')
+            
             self.drink = dict_response['A']['drink']
+            self.save_info(self.drink,'drink')
 
+            self.ingredient_list= dict_response['A']['ingredients']
+            self.save_info(self.ingredient_list, 'ingredients')
 
         ##########################
         ## Known objects condition
@@ -232,6 +330,8 @@ class BarTask():
         elif key_list[0] == 'B':
             self.spinner.stop()
             self.tts.playback('disinfection_notification.wav') # Audio was created before the developement of this script
+            fetch_transcript = self.pull_transcript('disinfection_notification.txt')
+            self.save_info(fetch_transcript, 'fetch')
             rospy.sleep(.3)
             self.known_obj_pub.publish(str(filtered_dict))
                 
@@ -250,6 +350,7 @@ class BarTask():
             ## Convert message to speech and play back for human operator
             self.tts.convert_to_speech(message, self.temp_filename)
             self.tts.playback(self.temp_filename)
+            self.save_info(message, 'fetch')
             self.tts.del_speech_file(self.temp_filename)
 
             ## Record response of human operator
@@ -269,17 +370,25 @@ class BarTask():
                         message = f"Okay, show me how to disifect the {label} "
                         self.tts.convert_to_speech(message, self.temp_filename)
                         self.tts.playback(self.temp_filename)
+                        self.save_info(message, 'fetch')
 
                         ## Publish relaxation status for the arm
                         self.human_demo_status_pub.publish('relax')
                         self.tts.playback('relax_arm.wav')
+                        fetch_transcript = self.pull_transcript('relax.txt')
+                        self.save_info(fetch_transcript, 'fetch')
                         
                         ## Prompt the user to start and stop recording arm trajectory
                         input("\n Press Enter to start recording arm trajectory")
                         self.tts.playback('recording_path_notification.wav')
+                        fetch_transcript = self.pull_transcript('recording_path_notification.txt')
+                        self.save_info(fetch_transcript, 'fetch')
                         self.human_demo_status_pub.publish('start')
+
                         input("\n Press Enter to stop recording the guided path")                        
                         self.tts.playback('saving_traj.wav')
+                        fetch_transcript = self.pull_transcript('saving_traj.txt')
+                        self.save_info(fetch_transcript, 'fetch')
                         self.human_demo_status_pub.publish('finish')
                         
                         ## Return the arm to the initial pose
@@ -294,20 +403,31 @@ class BarTask():
                     ## Notify the user after the demonstration
                     # print(filtered_dict)
                     self.tts.playback('after_demo.wav')
+                    fetch_transcript = self.pull_transcript('after_demo.txt')
+                    self.save_info(fetch_transcript, 'fetch')
                     rospy.sleep(1)
                     self.known_obj_pub.publish(str(filtered_dict))
                     
                 else: 
-                    
                     ## Filter known items and publish the dictionary
                     known_item_dict = {key: value for key, value in filtered_dict.items() if value['in_repo'] == True}
                     self.known_obj_pub.publish(str(known_item_dict))
 
         else:
             self.spinner.stop()
+            self.tts.playback("no_contamination.wav")
+            fetch_transcript = self.pull_transcript('no_contamination.txt')
+            self.save_info(fetch_transcript, 'fetch')
 
         self.flag = True
         # self.tts.del_speech_file(filename=self.temp_filename)    
+
+    def run(self):
+        while not rospy.is_shutdown():
+            dict_response = self.record_audio('cocktail_prompt.txt')
+            print(dict_response)
+            task = self.get_task(dict_response)
+
         
 
 if __name__ == '__main__':
@@ -319,13 +439,10 @@ if __name__ == '__main__':
     
     ## 
     input("press enter to start operation")
-    flag = True
-    while True:
-        if flag == True:
-            obj.begin_dialouge()
-            flag = False
 
-        dict_response = obj.record_audio('cocktail_prompt.txt')
-        print(dict_response)
-        task = obj.get_task(dict_response)
+    try:
+        obj.run()
+    except rospy.ROSInterruptException:
+        pass
+   
 
