@@ -23,7 +23,6 @@ from sensor_msgs.msg import PointCloud2, Image, PointCloud
 from geometry_msgs.msg import Point32
 from cv_bridge import CvBridge
 from std_msgs.msg import String
-from halo import Halo
 
 ## Define a class attribute or a global variable as a flag
 interrupted = False
@@ -32,6 +31,7 @@ interrupted = False
 def signal_handler(signal, frame):
     global interrupted
     interrupted = True
+    rospy.signal_shutdown("Interrupt recieved, shutting down...")
 
 ## Assign the signal handler to the SIGINT signal
 signal.signal(signal.SIGINT, signal_handler)
@@ -49,11 +49,25 @@ class ObjectSegmentation():
         self.cluster_obj = Cluster(pixel_size=0.005, dilation_size=8)
         self.vtt_obj = VisionToText()   
 
+        ## Initialize publisher
+        self.object_map_pub = rospy.Publisher('/object_map',  String, queue_size=10)
+        self.moved_obj_pub  = rospy.Publisher('moved_object', String, queue_size=10)
+
+        ## Initialize subscribers
+        self.cleaning_status_sub   = rospy.Subscriber('cleaning_status',      String, self.cleaning_status_callback)
+        self.human_demo_status_sub = rospy.Subscriber('human_demo_status',    String, self.human_demo_callback)
+        self.unknown_obj_sub       = rospy.Subscriber('unknown_object_label', String, self.in_repo_callback)
+
+        self.pcl2_sub      = message_filters.Subscriber("/head_camera/depth_downsample/points", PointCloud2)
+        self.raw_image_sub = message_filters.Subscriber("/head_camera/rgb/image_raw", Image)
+        sync               = message_filters.ApproximateTimeSynchronizer([self.pcl2_sub,
+                                                                          self.raw_image_sub],
+                                                                          queue_size=1,
+                                                                          slop=1.2)
+        sync.registerCallback(self.callback_sync) 
+
         ## Define the filename for the prompt that instructs the VLM how to label objects
         self.label_prompt_filename = 'label_prompt.txt'
-
-        ## Initialize publisher
-        self.object_map_pub = rospy.Publisher('/object_map', String, queue_size=10)
 
         ## Specify the relative path for the txt files that handle the updated maps
         self.relative_path = 'catkin_ws/src/voice_command_interface/'
@@ -70,19 +84,6 @@ class ObjectSegmentation():
             last_line = lines[-1].strip()
             self.repo_of_items = ast.literal_eval(last_line)
         
-        ## Initialize subscribers
-        self.cleaning_status_sub   = rospy.Subscriber('cleaning_status',      String, self.cleaning_status_callback)
-        self.human_demo_status_sub = rospy.Subscriber('human_demo_status',    String, self.human_demo_callback)
-        self.unknown_obj_sub       = rospy.Subscriber('unknown_object_label', String, self.in_repo_callback)
-
-        self.pcl2_sub      = message_filters.Subscriber("/head_camera/depth_downsample/points", PointCloud2)
-        self.raw_image_sub = message_filters.Subscriber("/head_camera/rgb/image_raw", Image)
-        sync               = message_filters.ApproximateTimeSynchronizer([self.pcl2_sub,
-                                                                          self.raw_image_sub],
-                                                                          queue_size=1,
-                                                                          slop=1.2)
-        sync.registerCallback(self.callback_sync) 
-
         ## Initialize TransformListener class
         self.listener = tf.TransformListener(True, rospy.Duration(10.0)) 
 
@@ -115,7 +116,6 @@ class ObjectSegmentation():
         - str_msg (String): The message containing the label of the unknown object.
         '''
         self.object_map_dict[str_msg.data]['in_repo']=True
-
 
 
     def timer_callback(self, event):
@@ -279,6 +279,8 @@ class ObjectSegmentation():
 
             ## Use VisionToText object to generate a label for the region based on the bounding box
             label = self.vtt_obj.viz_to_text(img=raw_image, bbox=regions_dict[id]["bbox"], prompt_filename = self.label_prompt_filename)
+            label = label.strip("'")
+            label = label.strip("`")
             self.object_map_dict[label] = {
                 'centroid': regions_dict[id]["centroid"],
                 'status': 'clean',
@@ -299,6 +301,7 @@ class ObjectSegmentation():
         self.json_data = json.dumps(self.object_map_dict)
         self.object_map_pub.publish(self.json_data)
 
+        ## 
         print(self.object_map_dict.keys())
 
 
@@ -328,6 +331,7 @@ class ObjectSegmentation():
             if len(copy_obj_map) == 1 and len(current_data) == 1:
                 label, = copy_obj_map
                 rospy.loginfo(f"The {label} has moved. updating map")
+                self.moved_obj_pub.publish(label)
                 id = next(iter(current_data))
                 self.object_map_dict[label]['centroid'] = current_data[id]["centroid"].copy()
                 self.object_map_dict[label]['status'] = 'contaminated'
@@ -352,14 +356,22 @@ class ObjectSegmentation():
                     if label in labels:
                         self.object_map_dict[label]['centroid'] = current_data[id]["centroid"].copy()
                         self.object_map_dict[label]['status'] = 'contaminated'
+                         ## Publish the dictionary as a String
+                        self.json_data = json.dumps(self.object_map_dict)
+                        self.object_map_pub.publish(self.json_data)
+                        
+                        rospy.loginfo(f"The {label} have moved. Updating map")
+                        self.moved_obj_pub.publish(str(label))
+                    
                     else:
                         print(label)
 
-                ## Publish the dictionary as a String
-                self.json_data = json.dumps(self.object_map_dict)
-                self.object_map_pub.publish(self.json_data)
+                # ## Publish the dictionary as a String
+                # self.json_data = json.dumps(self.object_map_dict)
+                # self.object_map_pub.publish(self.json_data)
                 
-                rospy.loginfo(f"The {labels} have moved. Updating map")
+                # rospy.loginfo(f"The {labels} have moved. Updating map")
+                # self.moved_obj_pub.publish(str(label))
  
           
                 
