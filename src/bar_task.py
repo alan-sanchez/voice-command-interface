@@ -97,33 +97,49 @@ class BarTask():
 
     def moved_obj_callback(self, str_msg):
         '''
-        
+        Callback function to handle a message indicating a moved object.
+
+        Parameters:
+        - str_msg (String): The message containing data about the moved object.
         '''
         self.save_info(str_msg.data, 'moved')
 
 
     def create_incremented_directory(self):
         '''
-        
+        Create a new incremented directory for saving data.
+
+        Returns:
+        - incremented_dir (String): The path to the newly created directory.
         '''
         # Check if the base directory exists
         if not os.path.exists(self.base_dir):
+            ## Create the base directory where data directories will be stored.
             os.makedirs(self.base_dir)
+            
+            ## Create the first incremented directory named 'data_0'
             incremented_dir = os.path.join(self.base_dir, "data_0")
             os.makedirs(incremented_dir)
+            
+            ## Return the path to the newly created directory
             return incremented_dir
 
-        # Find the highest incremented directory name
+        ## Find the highest incremented directory name
         existing_dirs = [d for d in os.listdir(self.base_dir) if os.path.isdir(os.path.join(self.base_dir, d)) and d.startswith("data_")]
         existing_indices = [int(d.split('_')[1]) for d in existing_dirs if d.split('_')[1].isdigit()]
 
+        ## Determine the new directory index by finding the maximum existing index and adding one.
         if existing_indices:
             new_index = max(existing_indices) + 1
         else:
+            # If there are no existing directories, start with index 0
             new_index = 0
 
+        ## Create a new directory with the incremented index
         incremented_dir = os.path.join(self.base_dir, f"data_{new_index}")
         os.makedirs(incremented_dir)
+        
+        ## Return the path to the newly created directory.
         return incremented_dir
     
     def save_info(self, content, process):
@@ -131,25 +147,25 @@ class BarTask():
         Save the transcript to a file in the save directory.
 
         Parameters:
-        - transcript (String): The transcript text to save.
+        - content (String): The text content to be saved.
+        - process (String): The process that generated the content. It determines which column the content will be saved in.
         '''
-        
-
+        ## Check if the start_time is set, and calculate the elapsed time since start_time
         if self.start_time == None:
             elapsed_time = "N/A"
         else:
             elapsed_time = str(round(time.time() - self.start_time,2))
         
-        ##
+        ## Define the path where the CSV file will be saved
         save_path = os.path.join(self.save_dir, 'transcript.csv')        
 
-        ## Define the header row
+        ## Define the header row for the CSV file
         header = ["Timestamp", "Fetch's transcript", "Transcribed audio", "Fetch's response to transcribed audio", "Drink", "Ingredients", "Moved object", "Map"]
 
-        ##
+        ## Initialize a new row with the elapsed time adn empty string for each content column
         row = [elapsed_time, "", "", "", "", "", "", ""]
 
-        ##
+        ## Determine which column to place the content based on the process argument
         if process == 'fetch':
             row[1]=content
         elif process == 'whisper':
@@ -173,8 +189,9 @@ class BarTask():
             if os.path.getsize(save_path) == 0:
                 writer.writerow(header)
             
-            ##
+            ## Write the row with the timestamp and content into the CSV file
             writer.writerow(row)
+
 
     def append_text_to_file(self, filename, text):
         '''
@@ -206,7 +223,7 @@ class BarTask():
         '''
         if str_msg.data == "complete":
             self.tts.playback("complete.wav")
-            fetch_transcript = self.pull_transcript('Complete.txt')
+            fetch_transcript = self.pull_transcript('complete.txt')
             self.save_info(fetch_transcript, 'fetch')
 
 
@@ -226,8 +243,6 @@ class BarTask():
         contaminated_objects = {key: value for key, value in self.object_map_dict.items() if value['status'] != 'clean'} 
         
         print(contaminated_objects)
-
-        self.save_info(contaminated_objects.keys(), 'contaminated')
 
         if len(self.ingredient_list) != 0:
             rospy.sleep(2)
@@ -284,9 +299,9 @@ class BarTask():
 
         ## Get the response from OpenAI API
         response = self.ttt.text_to_text(system_filename=filename, user_content=transcript)
-
         response = response.replace("```python ", "").replace("```", "").strip()
-        ##
+       
+        ## Log the response
         self.save_info(response, 'response')
         
         ## Return the response which is either a dictionary or list
@@ -314,15 +329,19 @@ class BarTask():
         ############################
         if key_list[0] == 'A':
             self.spinner.stop()
-            self.tts.playback('begin_mixing.wav') # Audio was created before the developement of this script
-            fetch_transcript = self.pull_transcript('begin_mixing.txt')
-            self.save_info(fetch_transcript, 'fetch')
             
+            ## Extract the drink information from the dicionary and save it
             self.drink = dict_response['A']['drink']
             self.save_info(self.drink,'drink')
 
+            ## Extract the drink information from the dictionary and save it
             self.ingredient_list= dict_response['A']['ingredients']
             self.save_info(self.ingredient_list, 'ingredients')
+
+            ## Playback an audio file indicating the start of the mixing process
+            self.tts.playback('begin_mixing.wav') # Audio was created before the developement of this script
+            fetch_transcript = self.pull_transcript('begin_mixing.txt')
+            self.save_info(fetch_transcript, 'fetch')
 
         ##########################
         ## Known objects condition
@@ -375,7 +394,7 @@ class BarTask():
                         ## Publish relaxation status for the arm
                         self.human_demo_status_pub.publish('relax')
                         self.tts.playback('relax_arm.wav')
-                        fetch_transcript = self.pull_transcript('relax.txt')
+                        fetch_transcript = self.pull_transcript('relax_arm.txt')
                         self.save_info(fetch_transcript, 'fetch')
                         
                         ## Prompt the user to start and stop recording arm trajectory
