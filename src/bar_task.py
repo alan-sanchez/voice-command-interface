@@ -13,11 +13,9 @@ import soundfile as sf
 
 from gpt_features import SpeechToText, TextToText, TextToSpeech
 from scipy.io.wavfile import write
-from pathlib import Path
 from openai import OpenAI
 from std_msgs.msg import String
 from halo import Halo
-from geometry_msgs.msg import Pose
 
 class BarTask():
     """
@@ -242,7 +240,7 @@ class BarTask():
         self.append_text_to_file(filename=self.cocktail_filename_dir, text= msg.data)
         contaminated_objects = {key: value for key, value in self.object_map_dict.items() if value['status'] != 'clean'} 
         
-        print(contaminated_objects)
+        # print(contaminated_objects)
 
         if len(self.ingredient_list) != 0:
             rospy.sleep(2)
@@ -250,7 +248,7 @@ class BarTask():
             # print(all_objs_used)
         
             if all_objs_used and self.flag == True:
-                print("made it here")
+                # print("made it here")
                 message = "Are you finished making your " + self.drink
                 self.flag = False
                 self.tts.convert_to_speech(text=message, filename=self.temp_filename)
@@ -278,7 +276,6 @@ class BarTask():
         
         ## Prompt the user to start recording
         input("Press Enter to start recording\n")
-        
         ## Record audio from the microphone
         self.myrecording = sd.rec(int(self.default_time * self.fs), samplerate=self.fs, channels=2)
         input('Recording... Press Enter to stop.\n')  # Wait for the user to press Enter to stop the recording
@@ -300,6 +297,8 @@ class BarTask():
         ## Get the response from OpenAI API
         response = self.ttt.text_to_text(system_filename=filename, user_content=transcript)
         response = response.replace("```python ", "").replace("```", "").strip()
+        response = response.replace("’","").strip()
+        response = response.replace("python ", "").strip()
        
         ## Log the response
         self.save_info(response, 'response')
@@ -444,7 +443,7 @@ class BarTask():
     def run(self):
         while not rospy.is_shutdown():
             dict_response = self.record_audio('cocktail_prompt.txt')
-            print(dict_response)
+            # print(dict_response)
             task = self.get_task(dict_response)
 
         
@@ -459,6 +458,10 @@ if __name__ == '__main__':
     ## 
     input("press enter to start operation")
 
+    # while True:
+    #     dict_response = obj.record_audio('cocktail_prompt.txt')
+    #     # print(dict_response)
+    #     task = obj.get_task(dict_response)
     try:
         obj.run()
     except rospy.ROSInterruptException:
