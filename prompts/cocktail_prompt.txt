@@ -19,7 +19,7 @@ Here are examples of how to respond to the bartender:
 
 condition drink selection:
     If the human operator says they are going to drink an item or make a specific drink, let's say a "rum and coke" for example. The respond with a 
-    dictionary with the letter 'A' as the key and a list of the ingredients and name of the drink as the value. Given the provided example list, the response should be:
+    dictionary with the letter 'A' as the key and a list of the ingredients and name of the drink as the value. Given the provided example list, the response should be in plain text:
     {'A':{'ingredients':['coke soda', 'rum bottle'], 'drink':'rum and coke'}}
 
 
@@ -30,21 +30,21 @@ condition drink selection:
 
         task condition 1:
             if the dictionary has an item or items that are both 'contaminated' and 'in_repo':true, then respond with a list of those items. 
-            For example, given the provided <example dictionary>, then the response should be:
+            For example, given the provided <example dictionary>, then the response should be in plain text:
             {'B': ['squirt soda']}
 
         task condition 2:
             else the dictionary has an item that is both 'contaminated' and 'in_repo':False, then this trumps conditions 1.  
-            For example, given the provided <example dicionary>, the response should be:
+            For example, given the provided <example dicionary>, the response should be in plain text:
             {'C': ['tonic water']}
 
         task condition 3:
-            If the dictionary has all 'clean', then respond with a the following dictionary:
+            If the dictionary has all 'clean', then respond with a the following dictionary in plain text:
             {'D': []}
 
 
-Remember that you only respond with a list, Not with other text that explains your reasoning! 
+Remember that you only respond with a list, Not with other text that explains your reasoning! Do not add any formatting or prefixes in your responses
 
 Okay, you no longer have to reference the example_dictionary. 
 When going through your conditionas, please reference the following dictionary:
-{"tequila bottle": {"centroid": [0.547, -0.246, 0.86], "status": "clean", "table_height": 0.78, "in_repo": true}, "squirt soda": {"centroid": [0.623, 0.283, 0.889], "status": "clean", "table_height": 0.78, "in_repo": true}, "coca-cola bottle": {"centroid": [0.622, 0.157, 0.931], "status": "contaminated", "table_height": 0.78, "in_repo": true}, "rum bottle": {"centroid": [0.687, -0.116, 0.893], "status": "clean", "table_height": 0.78, "in_repo": true}, "red solo cup": {"centroid": [0.723, 0.027, 0.846], "status": "clean", "table_height": 0.78, "in_repo": true}}
+{"tequila bottle": {"centroid": [0.591, -0.223, 0.95], "status": "contaminated", "table_height": 0.78, "in_repo": true}, "squirt soda": {"centroid": [0.717, 0.175, 0.891], "status": "contaminated", "table_height": 0.78, "in_repo": true}, "coca-cola bottle": {"centroid": [0.596, 0.291, 0.906], "status": "clean", "table_height": 0.78, "in_repo": true}, "red solo cup": {"centroid": [0.715, 0.035, 0.845], "status": "contaminated", "table_height": 0.78, "in_repo": true}, "rum bottle": {"centroid": [0.739, -0.09, 0.889], "status": "clean", "table_height": 0.78, "in_repo": true}}
