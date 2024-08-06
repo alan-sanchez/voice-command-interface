@@ -7,6 +7,7 @@ import json
 import ast
 import time
 import csv
+import numpy as np
 
 import sounddevice as sd
 import soundfile as sf
@@ -57,9 +58,15 @@ class BarTask():
         self.ttt = TextToText()
         self.tts = TextToSpeech()
 
-        ## Recording parameters: sampling rate and duration
+        ## Recording and beep parameters
         self.fs = 44100  # Sampling rate in Hz
         self.default_time = 10 # Duration in seconds
+        beep_freq = 1000
+        beep_duration = 0.1
+
+        ## Generate time values and beep signal (sine wave)
+        t = np.linspace(0, beep_duration, int(self.fs * beep_duration), endpoint=False)
+        self.beep = 0.5 * np.sin(2 * np.pi * beep_freq * t)
 
         ## Flag for initial object list
         self.ingredient_list = []
@@ -82,6 +89,7 @@ class BarTask():
 
         self.pull_transcript('after_demo.txt')
         
+
     def pull_transcript(self,filename):
         '''
         
@@ -130,7 +138,7 @@ class BarTask():
         if existing_indices:
             new_index = max(existing_indices) + 1
         else:
-            # If there are no existing directories, start with index 0
+            ## If there are no existing directories, start with index 0
             new_index = 0
 
         ## Create a new directory with the incremented index
@@ -140,6 +148,7 @@ class BarTask():
         ## Return the path to the newly created directory.
         return incremented_dir
     
+
     def save_info(self, content, process):
         '''
         Save the transcript to a file in the save directory.
@@ -243,19 +252,22 @@ class BarTask():
         # print(contaminated_objects)
 
         if len(self.ingredient_list) != 0:
-            rospy.sleep(2)
+            rospy.sleep(2.5)
             all_objs_used = all(obj in contaminated_objects for obj in self.ingredient_list)
             # print(all_objs_used)
         
-            if all_objs_used and self.flag == True:
+            if (all_objs_used == True) and (self.flag == True):
                 # print("made it here")
+                self.human_demo_status_pub.publish("waiting")
+                if self.drink == None:
+                    self.drink = "drink"
                 message = "Are you finished making your " + self.drink
                 self.flag = False
                 self.tts.convert_to_speech(text=message, filename=self.temp_filename)
                 self.tts.playback(self.temp_filename)
                 self.save_info(message, 'fetch')
 
-
+#{"rum bottle": {"centroid": [0.6, -0.247, 0.904], "status": "clean", "table_height": 0.78, "in_repo": true}, "squirt soda": {"centroid": [0.579, 0.018, 0.913], "status": "clean", "table_height": 0.78, "in_repo": true}, "red solo cup": {"centroid": [0.642, 0.272, 0.844], "status": "clean", "table_height": 0.78, "in_repo": true}, "tequila bottle": {"centroid": [0.704, -0.139, 0.868], "status": "clean", "table_height": 0.78, "in_repo": true}, "coca-cola bottle": {"centroid": [0.535, 0.159, 0.913], "status": "contaminated", "table_height": 0.78, "in_repo": true}}
     def record_audio(self, filename=None):
         """
         Method to record audio, convert it to text, and get a response from OpenAI API.
@@ -276,6 +288,11 @@ class BarTask():
         
         ## Prompt the user to start recording
         input("Press Enter to start recording\n")
+
+        ## Play beep to indicate user that they can speak now
+        sd.play(self.beep, samplerate=self.fs)
+        sd.wait()
+
         ## Record audio from the microphone
         self.myrecording = sd.rec(int(self.default_time * self.fs), samplerate=self.fs, channels=2)
         input('Recording... Press Enter to stop.\n')  # Wait for the user to press Enter to stop the recording
@@ -290,9 +307,9 @@ class BarTask():
         
         ## Use whisper speech to text (stt) converter
         transcript = self.stt.convert_to_text(temp_filename)
-        # print(transcript)
+        print(transcript)
         self.save_info(transcript, 'whisper')
-        os.remove(temp_filename)
+        # os.remove(temp_filename)
 
         ## Get the response from OpenAI API
         response = self.ttt.text_to_text(system_filename=filename, user_content=transcript)
@@ -341,6 +358,8 @@ class BarTask():
             self.tts.playback('begin_mixing.wav') # Audio was created before the developement of this script
             fetch_transcript = self.pull_transcript('begin_mixing.txt')
             self.save_info(fetch_transcript, 'fetch')
+
+            self.flag = True
 
         ##########################
         ## Known objects condition
@@ -437,7 +456,7 @@ class BarTask():
             fetch_transcript = self.pull_transcript('no_contamination.txt')
             self.save_info(fetch_transcript, 'fetch')
 
-        self.flag = True
+            self.flag = True
         # self.tts.del_speech_file(filename=self.temp_filename)    
 
     def run(self):
