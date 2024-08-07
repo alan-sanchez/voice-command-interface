@@ -33,7 +33,7 @@ class Cluster:
 
     def compute_regions(self, data):
         '''
-        Function that clusters pixels from an image.
+        Function that clusters pixels from a pointcloud.
         Parameters:
         - self: The self reference.
         - data (Numpy Array): Array that 
