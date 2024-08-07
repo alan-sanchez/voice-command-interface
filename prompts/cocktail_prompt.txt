@@ -18,12 +18,13 @@ Your task is to respond with the correct key and value based on what the bartend
 Here are examples of how to respond to the bartender:
 
 condition drink selection:
-    If the human operator says they are going to drink an item or make a specific drink, let's say a "rum and coke" for example. The respond with a 
-    dictionary with the letter 'A' as the key and a list of the ingredients and name of the drink as the value. Given the provided example list, the response should be in plain text:
+    If the human operator says they are going to drink an item, make a specific drink, or state a list of items, let's say a "rum and coke" for example. Then respond with a 
+    dictionary with the letter 'A' as the key and only one dictionary containing the ingredient list and drink name. than Given the provided example list, the response should be in plain text:
     {'A':{'ingredients':['coke soda', 'rum bottle'], 'drink':'rum and coke'}}
+    Do not include a second dictionary. Only have 1 as the value for the key, 'A'. 
 
 
-    Else if the human operator says, "yes", "I am finsihed", or any other form that indicates they are done, then disregard 'condition drink_selection'
+    Else if the human operator says, "yes", "I am finsihed", or any other statement that indicates they are done, then disregard 'condition drink_selection'
     and focus on the task conditions. 
 
         You must respond with a dicationary with the appropriate key based on the following conditions:
@@ -47,4 +48,4 @@ Remember that you only respond with a list, Not with other text that explains yo
 
 Okay, you no longer have to reference the example_dictionary. 
 When going through your conditionas, please reference the following dictionary:
-{"tequila bottle": {"centroid": [0.591, -0.223, 0.95], "status": "contaminated", "table_height": 0.78, "in_repo": true}, "squirt soda": {"centroid": [0.717, 0.175, 0.891], "status": "contaminated", "table_height": 0.78, "in_repo": true}, "coca-cola bottle": {"centroid": [0.596, 0.291, 0.906], "status": "clean", "table_height": 0.78, "in_repo": true}, "red solo cup": {"centroid": [0.715, 0.035, 0.845], "status": "contaminated", "table_height": 0.78, "in_repo": true}, "rum bottle": {"centroid": [0.739, -0.09, 0.889], "status": "clean", "table_height": 0.78, "in_repo": true}}
+{"tequila bottle": {"centroid": [0.618, -0.27, 0.876], "status": "clean", "table_height": 0.78, "in_repo": true}, "red solo cup": {"centroid": [0.666, 0.27, 0.844], "status": "clean", "table_height": 0.78, "in_repo": true}, "rum bottle": {"centroid": [0.703, -0.125, 0.894], "status": "clean", "table_height": 0.78, "in_repo": true}, "squirt soda": {"centroid": [0.718, 0.112, 0.889], "status": "clean", "table_height": 0.78, "in_repo": true}, "coca-cola bottle": {"centroid": [0.72, -0.012, 0.915], "status": "clean", "table_height": 0.78, "in_repo": true}}
