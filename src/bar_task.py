@@ -42,6 +42,8 @@ class BarTask():
         self.repo_filename_dir = os.path.join(os.environ['HOME'], self.relative_path, 'prompts/label_prompt.txt')
         self.base_dir = os.path.join(os.environ['HOME'], self.relative_path, 'data') 
         self.transcript_dir = os.path.join(os.environ['HOME'], self.relative_path, 'audio_files/audio_transcripts')
+        self.temp_audio_dir = os.path.join(os.environ['HOME'], self.relative_path, 'audio_files/temp_record.wav')
+
         ## Read the file contents
         with open(self.repo_filename_dir, 'r') as file:
             lines = file.readlines()
@@ -60,7 +62,7 @@ class BarTask():
 
         ## Recording and beep parameters
         self.fs = 44100  # Sampling rate in Hz
-        self.default_time = 10 # Duration in seconds
+        self.default_time = 6# Duration in seconds
         beep_freq = 1000
         beep_duration = 0.1
 
@@ -248,7 +250,6 @@ class BarTask():
         self.object_map_dict = json.loads(msg.data)
         self.append_text_to_file(filename=self.cocktail_filename_dir, text= msg.data)
         contaminated_objects = {key: value for key, value in self.object_map_dict.items() if value['status'] != 'clean'} 
-        
         # print(contaminated_objects)
 
         if len(self.ingredient_list) != 0:
@@ -260,14 +261,13 @@ class BarTask():
                 # print("made it here")
                 self.human_demo_status_pub.publish("waiting")
                 if self.drink == None:
-                    self.drink = "drink"
+                    self.drink = "unknown"
                 message = "Are you finished making your " + self.drink
                 self.flag = False
                 self.tts.convert_to_speech(text=message, filename=self.temp_filename)
                 self.tts.playback(self.temp_filename)
                 self.save_info(message, 'fetch')
 
-#{"rum bottle": {"centroid": [0.6, -0.247, 0.904], "status": "clean", "table_height": 0.78, "in_repo": true}, "squirt soda": {"centroid": [0.579, 0.018, 0.913], "status": "clean", "table_height": 0.78, "in_repo": true}, "red solo cup": {"centroid": [0.642, 0.272, 0.844], "status": "clean", "table_height": 0.78, "in_repo": true}, "tequila bottle": {"centroid": [0.704, -0.139, 0.868], "status": "clean", "table_height": 0.78, "in_repo": true}, "coca-cola bottle": {"centroid": [0.535, 0.159, 0.913], "status": "contaminated", "table_height": 0.78, "in_repo": true}}
     def record_audio(self, filename=None):
         """
         Method to record audio, convert it to text, and get a response from OpenAI API.
@@ -279,6 +279,7 @@ class BarTask():
         Returns:
         -Response(dictionary): reponse of GPT in a dictionary format. 
         """
+        
         if self.start_flag == True:
             self.start_time = time.time()
             self.tts.playback("hello.wav")
@@ -286,30 +287,58 @@ class BarTask():
             self.save_info(fetch_transcript, 'fetch')
             self.start_flag = False
         
-        ## Prompt the user to start recording
+        # ## Prompt the user to start recording
+        # input("Press Enter to start recording\n")
+
+        # ## Play beep to indicate user that they can speak now
+        # sd.play(self.beep, samplerate=self.fs)
+        # sd.wait()
+
+        # ## Record audio from the microphone
+        # myrecording = sd.rec(int(self.default_time * self.fs), samplerate=self.fs, channels=2)
+        # input('Recording... Press Enter to stop.\n')  # Wait for the user to press Enter to stop the recording
+        # sd.stop()
+
+        # Prompt the user to start recording
         input("Press Enter to start recording\n")
 
-        ## Play beep to indicate user that they can speak now
+        # Play beep to indicate user can speak now
         sd.play(self.beep, samplerate=self.fs)
         sd.wait()
 
-        ## Record audio from the microphone
-        self.myrecording = sd.rec(int(self.default_time * self.fs), samplerate=self.fs, channels=2)
-        input('Recording... Press Enter to stop.\n')  # Wait for the user to press Enter to stop the recording
-        sd.stop()
-        
+        # Prepare to store recorded data
+        recorded_frames = []
+
+        # Define a callback function to capture audio input
+        def callback(indata, frames, time, status):
+            if status:
+                print(status, file=sys.stderr)
+            recorded_frames.append(indata.copy())
+
+        # Create an input stream
+        with sd.InputStream(samplerate=self.fs, channels=2, callback=callback):
+            # Inform the user of recording status
+            print('Recording... Press Enter to stop.')
+            input()  # Wait for the user to press Enter to stop the recording
+
         ## Start the spinner to indicate processing
         self.spinner.start()
 
+        # Convert recorded frames to a numpy array
+        myrecording = np.concatenate(recorded_frames, axis=0)
+
         ## create temporary file name and save the recorded audio as a WAV file
-        temp_filename = 'temp_recording.wav'
-        write(temp_filename, self.fs, self.myrecording)  # Save as WAV file 
+        # temp_filename = 'temp_recording.wav'
+        write(self.temp_audio_dir, self.fs, myrecording)  # Save as WAV file 
         
+        myrecording = None
+        del myrecording
+
         ## Use whisper speech to text (stt) converter
-        transcript = self.stt.convert_to_text(temp_filename)
+        transcript = self.stt.convert_to_text(self.temp_audio_dir)
         print(transcript)
         self.save_info(transcript, 'whisper')
-        # os.remove(temp_filename)
+        os.remove(self.temp_audio_dir)
 
         ## Get the response from OpenAI API
         response = self.ttt.text_to_text(system_filename=filename, user_content=transcript)
@@ -359,6 +388,7 @@ class BarTask():
             fetch_transcript = self.pull_transcript('begin_mixing.txt')
             self.save_info(fetch_transcript, 'fetch')
 
+            ## Conditional statment passed
             self.flag = True
 
         ##########################
@@ -450,6 +480,9 @@ class BarTask():
                     known_item_dict = {key: value for key, value in filtered_dict.items() if value['in_repo'] == True}
                     self.known_obj_pub.publish(str(known_item_dict))
 
+        #############################
+        ## No contamination condition
+        #############################
         else:
             self.spinner.stop()
             self.tts.playback("no_contamination.wav")
@@ -464,8 +497,7 @@ class BarTask():
             dict_response = self.record_audio('cocktail_prompt.txt')
             # print(dict_response)
             task = self.get_task(dict_response)
-
-        
+ 
 
 if __name__ == '__main__':
     ## Initialize the ROS node with the name 'audio_node'
@@ -476,11 +508,8 @@ if __name__ == '__main__':
     
     ## 
     input("press enter to start operation")
-
-    # while True:
-    #     dict_response = obj.record_audio('cocktail_prompt.txt')
-    #     # print(dict_response)
-    #     task = obj.get_task(dict_response)
+    
+    ##
     try:
         obj.run()
     except rospy.ROSInterruptException:
