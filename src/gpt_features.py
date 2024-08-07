@@ -56,7 +56,7 @@ class SpeechToText(OpenAIBase):
         '''
         ## Define audio directory
         if filename == "intro":
-            filename = os.path.join(os.environ['HOME'], self.relative_path, 'audio_files', filename + '.wav') 
+            filename = os.path.join(os.environ['HOME'], self.relative_path, 'audio_files', filename) 
 
         ## Ready file
         with open(filename, "rb") as audio_file:
@@ -291,8 +291,8 @@ if __name__ == "__main__":
             print(f"Converted Text: {text}")
 
         elif control_selection == "2":
-            content = "I will now begin disinfecting all of the contaminated objects."
-            filename = "after_demo.wav"
+            content = "Beginning disinfection task. Stay clear."
+            filename = "disinfection_notification.wav"
             tts.convert_to_speech(text=content, filename=filename)
             tts.playback(filename)
 
