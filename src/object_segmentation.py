@@ -63,7 +63,7 @@ class ObjectSegmentation():
         sync               = message_filters.ApproximateTimeSynchronizer([self.pcl2_sub,
                                                                           self.raw_image_sub],
                                                                           queue_size=1,
-                                                                          slop=1.2)
+                                                                          slop=.4)
         sync.registerCallback(self.callback_sync) 
 
         ## Define the filename for the prompt that instructs the VLM how to label objects
@@ -96,7 +96,7 @@ class ObjectSegmentation():
         self.table_height = 0.5 # in meters
         self.max_table_reach = 0.8 # in meters
         self.object_map_dict = {}
-        self.moved_threshold = .05 # in meters
+        self.moved_threshold = .02 # in meters
         self.start = True # Start flag for initial run
         self.json_data = None # JSON data to be published
         self.cleaning_status = "complete"
@@ -126,9 +126,10 @@ class ObjectSegmentation():
         - event: The timer event.
         '''
         if self.start == True:
-            rospy.sleep(5)
+            rospy.sleep(3)
             self.start = False 
         elif self.start == False and self.cleaning_status == 'complete':
+            print("timer is working")
             self.location_updater()
 
 
@@ -233,18 +234,25 @@ class ObjectSegmentation():
                 x_plot.append(x[i]) # used for visual debugger
                 y_plot.append(y[i]) # used for visual debugger
                 object_pcl_coordinates.append([float(x[i]), float(y[i]), float(z[i])])
-        object_pcl_coordinates = np.array(object_pcl_coordinates)
+        object_pcl_coordinates_arr = np.array(object_pcl_coordinates)
         
+        # print(len(object_pcl_coordinates))
         ## Create region dictionary by clustering the object's x and y coordinates
-        regions_dict = self.cluster_obj.compute_regions(object_pcl_coordinates)
+        regions_dict = self.cluster_obj.compute_regions(object_pcl_coordinates_arr)
+        
 
         ## Compute bounding boxes for each region and update the regions dictionary
         bbox_list = []
         for id in regions_dict:
+            # print()
+            # print(len(regions_dict[id]))
+            if len(regions_dict[id]["points"]) == 0:
+                continue
             bbox = self.bbox_obj.compute_bbox(regions_dict[id])
             bbox_list.append(bbox) # Also used for visual debugger
             regions_dict[id]["bbox"] = bbox
             del regions_dict[id]["points"]
+        print("----")
 
         ## Conditional statement to visualize the segmented images and the x and y coordinates 
         if visual_debugger:
@@ -281,6 +289,7 @@ class ObjectSegmentation():
             label = self.vtt_obj.viz_to_text(img=raw_image, bbox=regions_dict[id]["bbox"], prompt_filename = self.label_prompt_filename)
             label = label.strip("'")
             label = label.strip("`")
+            # label = label.strip("")
             self.object_map_dict[label] = {
                 'centroid': regions_dict[id]["centroid"],
                 'status': 'clean',
@@ -317,23 +326,40 @@ class ObjectSegmentation():
             ## Iterate over each object in the current location dictionary
             for label, data in self.object_map_dict.items():
                 centroid = data['centroid']
+                ## Extract only the x and y coordinates
+                centroid_xy = centroid[:2]  # This assumes the list is [x, y, z]
+                
                 for key in current_data:
                     ## Calculate the Euclidean distance between the current object and the new detected object
-                    euclidean_dist = np.linalg.norm(np.array(centroid) - np.array(current_data[key]['centroid']))
-                    
+                    current_centroid_xy = current_data[key]['centroid'][:2]
+                    ## Calculate the Euclidean distance between the current object and the new detected object
+                    # euclidean_dist = np.linalg.norm(np.array(centroid) - np.array(current_data[key]['centroid']))
+                    euclidean_dist = np.linalg.norm(np.array(centroid_xy) - np.array(current_centroid_xy))
+
                     ## If the distance is less than the threshold, consider it the same object
                     if euclidean_dist < self.moved_threshold:
                         current_data.pop(key) # Remove the detected object from current data
                         copy_obj_map.pop(label) # Remove the label from the copy of the object location dictionary
                         break
+            
+            if len(copy_obj_map) == 1 and len(current_data) == 0:
+                label, = copy_obj_map
+                rospy.loginfo(f"The {label} has moved. Can't update map since it is out of frame")
+                self.moved_obj_pub.publish(label)
+                self.object_map_dict[label]['status'] = 'contaminated'
+
+                ## Publish the dictionary as a String
+                # self.json_data = json.dumps(self.object_map_dict)
+                # self.object_map_pub.publish(self.json_data)
 
             ## If there is exactly one object that moved, update its location in the map
-            if len(copy_obj_map) == 1 and len(current_data) == 1:
+            elif len(copy_obj_map) == 1 and len(current_data) == 1:
                 label, = copy_obj_map
                 rospy.loginfo(f"The {label} has moved. updating map")
                 self.moved_obj_pub.publish(label)
                 id = next(iter(current_data))
                 self.object_map_dict[label]['centroid'] = current_data[id]["centroid"].copy()
+                
                 self.object_map_dict[label]['status'] = 'contaminated'
 
                 ## Publish the dictionary as a String
@@ -365,15 +391,7 @@ class ObjectSegmentation():
                     
                     else:
                         print(label)
-
-                # ## Publish the dictionary as a String
-                # self.json_data = json.dumps(self.object_map_dict)
-                # self.object_map_pub.publish(self.json_data)
-                
-                # rospy.loginfo(f"The {labels} have moved. Updating map")
-                # self.moved_obj_pub.publish(str(label))
  
-          
                 
 if __name__=="__main__":
     ## Initialize irradiance_vectors node
@@ -383,7 +401,7 @@ if __name__=="__main__":
     obj = ObjectSegmentation()
     
     ## Allow some time for initialization
-    rospy.sleep(1.5)
+    rospy.sleep(2.5)
 
     ## Segment the image and get the regions dictionary
     dict = obj.segment_image(visual_debugger=True)
