@@ -62,7 +62,7 @@ class BBox():
         
         ## Transform the point cloud to the target frame
         transformed_cloud = self.transform_pointcloud(point_cloud_msg, "head_camera_rgb_optical_frame")   
-        
+        # print(len(transformed_cloud.points))
         ## Initialize lists to store the transformed x, y coordinates values
         x_img = []
         y_img = []
@@ -109,6 +109,7 @@ class BBox():
         Returns:
         - new_cloud(PointCloud): The transformed PointCloud message.
         """
+        # pcl_msg.header.stamp=rospy.Time.now()
         while not rospy.is_shutdown():
             try:
                 new_cloud = self.listener.transformPointCloud(target_frame ,pcl_msg)
@@ -118,8 +119,5 @@ class BBox():
     
                 
 if __name__=="__main__":
-    ## Initialize irradiance_vectors node
-    # rospy.init_node('yolo_coord_estimation',anonymous=True)
-
     ## Instantiate the `CoordinateEstimation` class
     obj = BBox()
