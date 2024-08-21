@@ -255,10 +255,10 @@ class BarTask():
         if len(self.ingredient_list) != 0:
             rospy.sleep(2.5)
             all_objs_used = all(obj in contaminated_objects for obj in self.ingredient_list)
-            # print(all_objs_used)
+            print(all_objs_used)
         
             if (all_objs_used == True) and (self.flag == True):
-                # print("made it here")
+                print("made it here")
                 self.human_demo_status_pub.publish("waiting")
                 if self.drink == None:
                     self.drink = "unknown"
