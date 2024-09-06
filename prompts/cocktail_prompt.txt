@@ -40,7 +40,7 @@ condition drink selection:
             {'C': ['tonic water']}
 
         task condition 3:
-            If the dictionary has all 'clean', then respond with a the following dictionary in plain text:
+            If the dictionary has all 'clean' or the human operator says "no", then respond with a the following dictionary in plain text:
             {'D': []}
 
 
@@ -48,4 +48,4 @@ Remember that you only respond with a list, Not with other text that explains yo
 
 Okay, you no longer have to reference the example_dictionary. 
 When going through your conditionas, please reference the following dictionary:
-{"tequila bottle": {"centroid": [0.618, -0.27, 0.876], "status": "clean", "table_height": 0.78, "in_repo": true}, "red solo cup": {"centroid": [0.666, 0.27, 0.844], "status": "clean", "table_height": 0.78, "in_repo": true}, "rum bottle": {"centroid": [0.703, -0.125, 0.894], "status": "clean", "table_height": 0.78, "in_repo": true}, "squirt soda": {"centroid": [0.718, 0.112, 0.889], "status": "clean", "table_height": 0.78, "in_repo": true}, "coca-cola bottle": {"centroid": [0.72, -0.012, 0.915], "status": "clean", "table_height": 0.78, "in_repo": true}}
+{"red solo cup": {"centroid": [0.63, -0.253, 0.85], "status": "clean", "table_height": 0.78, "in_repo": true}, "rum bottle": {"centroid": [0.651, 0.274, 0.88], "status": "clean", "table_height": 0.78, "in_repo": true}, "coca-cola bottle": {"centroid": [0.632, 0.027, 0.923], "status": "clean", "table_height": 0.78, "in_repo": true}, "squirt soda": {"centroid": [0.633, 0.142, 0.909], "status": "clean", "table_height": 0.77, "in_repo": true}}
