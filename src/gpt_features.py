@@ -48,11 +48,11 @@ class SpeechToText(OpenAIBase):
         Link:https://platform.openai.com/docs/guides/speech-to-text
         
         Parameters:
-        text (str): The text to convert to speech.
-        filename (str): The filename to save the speech audio.
+        - text (str): The text to convert to speech.
+        - filename (str): The filename to save the speech audio.
 
         Return:
-        transcription.txt (str): The transcribed audio.
+        - transcription.txt (str): The transcribed audio.
         '''
         ## Define audio directory
         if filename == "intro":
@@ -83,8 +83,8 @@ class TextToSpeech(OpenAIBase):
         Link:https://platform.openai.com/docs/guides/text-to-speech
         
         Parameters:
-        text (str): The text to convert to speech.
-        filename (str): The filename to save the speech audio.
+        - text (str): The text to convert to speech.
+        - filename (str): The filename to save the speech audio.
         """
         ## Create a speech response using OpenAI's API
         response = self.client.audio.speech.create(model="tts-1", voice="alloy", input=text)
@@ -99,7 +99,7 @@ class TextToSpeech(OpenAIBase):
         Plays back the specified audio file if it exists.
         
         Parameters:
-        filename (str): The filename of the audio file to play back.
+        - filename (str): The filename of the audio file to play back.
         """
         ## Construct the full file path for the audio file
         file_dir = os.path.join(os.environ['HOME'], self.relative_path, 'audio_files', filename )
