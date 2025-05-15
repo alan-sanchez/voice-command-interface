@@ -3,7 +3,7 @@
     <include file="$(find uv_project)/launch/move_group.launch" />
 
     <!-- Start the task executive node -->
-    <node pkg="voice_command_interface" type="task_2_executive.py" name="task_2_executive" output="screen"/>
+    <node pkg="voice_command_interface" type="task_executive.py" name="task_executive" output="screen"/>
 
     <!-- Start the arm controller node -->
     <node pkg="voice_command_interface" type="arm_control.py" name="arm_control" output="screen"/>
