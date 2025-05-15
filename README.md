@@ -1,13 +1,67 @@
-# Voice Command Interface
+# Voice-Command Interface for Context-Aware UV Disinfection
+Hands-free control of a mobile-manipulator robot using Whisper (STT), a Vision-Language Model (VLM), and an LLM prompt pipeline.
 
-## Install
+<!-- > **Reference paper**  
+> A. G. Sanchez, M. R. Miller, W. D. Smart, *A Hands-Free Interface for Disinfection During Tabletop Tasks*, RO-MAN 2024.  
+> PDF included in this repository (`A_Hands-Free_Interface_for_Disinfection_During_Tabletop_Tasks.pdf`). -->
 
-### Install dependencies on robot
-Install the necessary packages to run a simulation environment with a fetch robot.
+---
 
-TODO: Complete setup instructions for both the robot and desktop
-<!--
+## Motivation & Scenario
+
+Our long-term goal is a system that **works alongside a human performing multi-step tabletop tasks involving several objects**.  
+The robot:
+
+* **Monitors** which objects the human touches,  
+* **Recognizes** when the task is finished, then  
+* **Disinfects only those “contaminated” items**, minimizing disruption to the human coworker.
+
+While the ultimate target is medical or laboratory workflows , we validate the approach in a **bartending task**: 
+<!-- (extending our prior Ebola and COVID-19 disinfection research [1, 2]) -->
+
+* Multiple drink ingredients sit on a bar.  
+* A participant prepares any drink they choose, in any order.  
+* The robot must flexibly understand the chosen recipe, track used items, and disinfect them afterward—asking for a demonstration if it lacks a tool path for a new object.
+ <!-- [3]. -->
+
+---
+
+## System Flow
+
+1. **Object Mapping & Labeling**  
+   The robot scans the table, clusters the point cloud, and labels each object via the VLM.
+
+2. **Initiation**  
+   When a bartender approaches, the robot greets them and asks what drink they plan to make.
+
+3. **Preparation**  
+   From the spoken drink name, the LLM infers which labeled objects are required.
+
+4. **Tracking**  
+   As objects are manipulated, the robot marks them “contaminated” and monitors task progress.
+
+5. **Disinfection**  
+   On confirmation that the drink is complete, the robot disinfects the contaminated items.  
+   * If a disinfection trajectory is missing, it requests a Programming-by-Demonstration (PbD) demo from the human operator.
+
+![](repo_media/system_flow.png)
+<!-- 
+All explicit communication is **verbal**; no tablets, buttons, or markers are required.  
+Only the set of objects that *can* be disinfected is pre-defined (each with a learned end-effector trajectory). -->
+
+
+
+
+---
+
+## Quick Start (to be completed)
+
+```bash
+# Clone & build
+# TODO: add dependency and setup instructions
 ```
+
+<!-- ```
 sudo apt-get update
 sudo apt-get install ros-melodic-fetch*
 ```
